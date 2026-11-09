@@ -13,6 +13,10 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
 - **单仓库、单窗口**：一个进程打开一个工作树。不要引入全局仓库状态。
 - **git 后端是 CLI**：所有操作走 `git` 子进程，不实现对象数据库，也不引入 go-git。
   这样行为、错误信息和钩子都与用户命令行里的 git 一致。
+- **图标**：`assets/icon.svg` 是设计源；`tools/genicon` 用 `x/image/vector` 按同一
+  几何/配色光栅化出 256 与 512 两张 PNG，不依赖外部 SVG 渲染器。改图标时两份一起改，
+  再跑 `make icon`。`main.go` 用 `//go:embed assets/icon-256.png` 设置窗口与 Dock 图标，
+  `mygo.json` 的 `icon` 指向 512。`main_test.go` 会抽样像素，防止图标画空。
 
 ## 常用命令
 
@@ -22,6 +26,7 @@ make test     # CGO_ENABLED=0 go test ./...
 make vet      # CGO_ENABLED=0 go vet ./...
 make build    # 静态发布二进制 ./git-k（-trimpath -tags mygo_noinspector -s -w）
 make fmt      # go fmt ./...
+make icon     # go run ./tools/genicon，重生成 assets/icon-{256,512}.png
 ```
 
 发布构建不要带 inspector：`mygo_noinspector` 同时会关掉自动化插件。
@@ -29,7 +34,10 @@ make fmt      # go fmt ./...
 ## 目录
 
 ```
-main.go              mygo 应用、窗口、命令行参数
+main.go              mygo 应用、窗口、命令行参数、嵌入窗口图标
+assets/icon.svg      应用图标设计源：512 圆角底 + 紫→蓝 K
+assets/icon-{256,512}.png  由 tools/genicon 生成的位图
+tools/genicon/       与 SVG 同一几何的纯 Go 光栅化器
 app/gitx/            唯一的 git 边界：发现仓库、状态、diff、stage、commit、草稿
   repo.go            运行器、环境变量、Repo 元数据
   status.go          porcelain v2 -z 解析与分组

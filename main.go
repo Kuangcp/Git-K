@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +11,9 @@ import (
 
 	"git-k/ui"
 )
+
+//go:embed assets/icon-256.png
+var appIconPNG []byte
 
 var version = "dev"
 
@@ -41,6 +45,12 @@ func main() {
 			MinHeight: 520,
 			Content:   mygoUI.View(r.View),
 		})
+		if err := win.SetIcon(appIconPNG); err != nil {
+			log.Printf("设置窗口图标失败: %v", err)
+		}
+		if mygo.App.Dock != nil {
+			_ = mygo.App.Dock.SetIcon(appIconPNG)
+		}
 		r.Attach(win)
 	})
 	if err := mygo.App.Run(); err != nil {

@@ -2,7 +2,7 @@ GO ?= go
 BIN := git-k
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: run build test vet fmt tidy clean
+.PHONY: run build test vet fmt tidy icon clean
 
 # 开发运行：始终关闭 cgo，mygo 的 native UI 不需要它。
 run:
@@ -24,6 +24,10 @@ fmt:
 
 tidy:
 	CGO_ENABLED=0 $(GO) mod tidy
+
+# 由 assets/icon.svg 的同一几何生成 assets/icon-{256,512}.png。
+icon:
+	CGO_ENABLED=0 $(GO) run ./tools/genicon
 
 clean:
 	rm -f $(BIN)
