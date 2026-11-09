@@ -85,14 +85,19 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 
 ## UI 规则
 
-- 布局：上边 `SplitPercent`（状态 / 提交），下边 diff；两个 split 都要 `.Fill()`，
-  否则窗口底部会留空。
+- 布局对齐 git-cola：左列上方提交信息、下方 diff，右列整块状态。左侧宽度用
+  `SplitPercent`，左列上下用 `SplitVerticalPercent`；两个 split 都要 `.Fill()`，
+  否则窗口底部会留空。分隔条可拖动调整比例。
+- 没有实现 Qt 那种可浮动、可停靠、可叠加的 dock 系统：目前只有可拖动的 split。
+  如要 dock，需要另做布局持久化、拖拽命中和浮动面板，工作量大，先不做。
 - 状态列表用 `ui.List` + `ListState.Header` 做粘性分组，`Selection` 多选，
   `Key` 用 `Row.Key`，`Label` 给读屏和首字母定位。不要为每个文件建真实控件。
 - 状态字母 `A/M/D/R/C/U/?` 用主题语义色（`Success/Warning/Danger/Accent/TextMuted`），
   不要在组件里写死十六进制。
-- 提交编辑器是 `editor.View` + `editor.Buffer`；第一行摘要，空行后正文，软换行、
-  无行号。草稿 500ms 防抖写入 `.git/GIT_K_MSG`，提交成功后清空。
+- 提交信息是两个输入框：单行 `TextInput`（`root.summary`，提交摘要）和
+  `editor.View` + `editor.Buffer`（`root.body`，详细描述）。提交时由
+  `root.message()` 拼成「摘要 + 空行 + 正文」；空正文时只有摘要。草稿 500ms 防抖
+  写入 `.git/GIT_K_MSG`，读回时由 `splitMessage()` 拆成两个框，提交成功后清空。
 - 快捷键对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、`Ctrl+U` 取消暂存、
   `Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交。用 `Context.Shortcut`，不要全局 hook。
 - 错误必须可见：状态错误在列表里，diff 错误在 diff 面板，提交失败在提交面板；

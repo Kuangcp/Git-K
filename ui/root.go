@@ -46,8 +46,9 @@ type root struct {
 	commitErr  string
 	note       string
 
-	msg      *editor.Buffer
-	msgView  editor.State
+	summary  string
+	body     *editor.Buffer
+	bodyView editor.State
 	amend    bool
 	draftSeq atomic.Uint64
 	draftTxt string
@@ -65,8 +66,8 @@ type root struct {
 	raw     *editor.Buffer
 	rawView editor.State
 
-	sidePercent float32
-	diffPercent float32
+	sidePercent   float32
+	commitPercent float32
 
 	statusGen uint64
 	diffGen   uint64
@@ -90,14 +91,14 @@ const (
 // the window state. An empty dir means the current directory.
 func NewRoot(dir string) *root {
 	a := &root{
-		sidePercent: 38,
-		diffPercent: 46,
-		cur:         -1,
+		sidePercent:   48,
+		commitPercent: 44,
+		cur:           -1,
 	}
-	a.msg = editor.NewBuffer("")
-	a.msgView = editor.State{
-		Buffer:      a.msg,
-		Placeholder: "提交信息\n\n第一行是摘要，空行后写正文。",
+	a.body = editor.NewBuffer("")
+	a.bodyView = editor.State{
+		Buffer:      a.body,
+		Placeholder: "详细描述…",
 		SoftWrap:    true,
 		LineNumbers: editor.LineNumbersOff,
 		NoFolding:   true,
@@ -136,21 +137,31 @@ func (a *root) View(c *ui.Context) {
 		a.noRepo(c)
 		return
 	}
+	// 帧首同步 diff：DiffState 被视图元素按指针引用，构建后再重置会让
+	// 正在绘制的编辑器读到零值。
+	a.syncDiff()
+	curBefore := a.cur
 	ui.Column(c).Fill().Children(func() {
 		a.topBar(c)
-		ui.SplitVerticalPercent(c, &a.diffPercent, func() {
-			ui.SplitPercent(c, &a.sidePercent, func() {
-				a.statusPane(c)
-			}, func() {
-				a.commitPane(c)
-			}).Fill()
+		ui.SplitPercent(c, &a.sidePercent, func() {
+			// 左列：提交信息在上，差异在下；右列是状态。
+			ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+				ui.SplitVerticalPercent(c, &a.commitPercent, func() {
+					a.commitPane(c)
+				}, func() {
+					a.diffPane(c)
+				}).Fill()
+			})
 		}, func() {
-			a.diffPane(c)
+			a.statusPane(c)
 		}).Fill()
 		a.footer(c)
 	})
-	a.syncDiff()
 	a.shortcuts(c)
+	if a.cur != curBefore {
+		// 点击选中的新行在本帧才写入 cur，下一帧再同步 diff。
+		c.Invalidate()
+	}
 }
 
 // update runs fn on the main thread, or at once in a test with no window.
@@ -208,8 +219,10 @@ func (a *root) openRepo(dir string) {
 	a.resetDiff()
 	a.commitErr = ""
 	a.note = ""
-	a.msg.Reset(repo.CommitMessage())
-	a.draftTxt = a.msg.String()
+	summary, body := splitMessage(repo.CommitMessage())
+	a.summary = summary
+	a.body.Reset(body)
+	a.draftTxt = a.message()
 	a.refreshStatus()
 	a.updateTitle()
 	if a.win != nil {
@@ -597,9 +610,9 @@ func (a *root) doCommit() {
 	if a.commitBusy || a.repo == nil {
 		return
 	}
-	msg := a.msg.String()
-	if strings.TrimSpace(msg) == "" {
-		a.commitErr = "请填写提交信息"
+	msg := a.message()
+	if strings.TrimSpace(a.summary) == "" {
+		a.commitErr = "请填写提交摘要"
 		return
 	}
 	if !a.status.HasStaged() && !a.amend {
@@ -630,7 +643,8 @@ func (a *root) doCommit() {
 			}
 			a.draftSeq.Add(1)
 			_ = repo.SaveCommitMessage("")
-			a.msg.Reset("")
+			a.summary = ""
+			a.body.Reset("")
 			a.draftTxt = ""
 			a.amend = false
 			a.diffKey = ""
@@ -643,7 +657,7 @@ func (a *root) maybeSaveDraft() {
 	if a.repo == nil {
 		return
 	}
-	s := a.msg.String()
+	s := a.message()
 	if s == a.draftTxt {
 		return
 	}
@@ -662,6 +676,29 @@ func (a *root) maybeSaveDraft() {
 		}
 		_ = repo.SaveCommitMessage(s)
 	}()
+}
+
+// message composes the summary and the extended description as git
+// stores them.
+func (a *root) message() string {
+	summary := strings.TrimSpace(a.summary)
+	body := strings.TrimRight(a.body.String(), "\r\n")
+	if body == "" {
+		return summary
+	}
+	return summary + "\n\n" + body + "\n"
+}
+
+// splitMessage reads a draft back into its summary and its description.
+func splitMessage(s string) (summary, body string) {
+	s = strings.TrimRight(s, "\r\n")
+	if i := strings.Index(s, "\n\n"); i >= 0 {
+		return s[:i], strings.TrimLeft(s[i+2:], "\r\n")
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }
 
 // ---- watching -------------------------------------------------------------

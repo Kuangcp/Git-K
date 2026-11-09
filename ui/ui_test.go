@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 
 	"git-k/app/gitx"
 )
@@ -51,7 +52,7 @@ func TestStatusDiffCommit(t *testing.T) {
 	tt := ui.NewTester(r.View, 1100, 800)
 	tt.Frame()
 
-	for _, want := range []string{"状态", "提交信息", "a.txt", "未跟踪"} {
+	for _, want := range []string{"状态", "提交摘要", "a.txt", "未跟踪"} {
 		if !tt.HasText(want) {
 			t.Fatalf("missing %q in %v", want, tt.Texts())
 		}
@@ -69,7 +70,8 @@ func TestStatusDiffCommit(t *testing.T) {
 		t.Fatalf("status after stage: %+v", r.status.Rows)
 	}
 
-	r.msg.Reset("test: add a.txt\n\nbody\n")
+	r.summary = "test: add a.txt"
+	r.body.Reset("body")
 	tt.Frame()
 	if err := tt.Click("提交"); err != nil {
 		t.Fatalf("click commit: %v", err)
@@ -149,5 +151,54 @@ func TestClickRowSelectsDiff(t *testing.T) {
 	}
 	if r.diffAdded != 1 || r.diffMode != diffPatch {
 		t.Fatalf("b.txt diff: mode=%v added=%d err=%q", r.diffMode, r.diffAdded, r.diffErr)
+	}
+}
+
+func TestMessageComposition(t *testing.T) {
+	a := &root{summary: "feat: summary ", body: nil}
+	a.body = editor.NewBuffer("line one\nline two\n")
+	if got, want := a.message(), "feat: summary\n\nline one\nline two\n"; got != want {
+		t.Fatalf("message: %q, want %q", got, want)
+	}
+	a.body.Reset("")
+	if got := a.message(); got != "feat: summary" {
+		t.Fatalf("summary only: %q", got)
+	}
+	sum, body := splitMessage("feat: summary\n\nline one\nline two\n")
+	if sum != "feat: summary" || body != "line one\nline two" {
+		t.Fatalf("split: %q / %q", sum, body)
+	}
+	sum, body = splitMessage("only summary\n")
+	if sum != "only summary" || body != "" {
+		t.Fatalf("split one line: %q / %q", sum, body)
+	}
+}
+
+// git-cola's arrangement: commit above diff on the left, status on the right.
+func TestLayoutLeftColumn(t *testing.T) {
+	dir := newRepo(t)
+	r := NewRoot(dir)
+	tt := ui.NewTester(r.View, 1200, 800)
+	tt.Frame()
+	summary, ok := tt.Find("提交摘要")
+	if !ok {
+		t.Fatalf("summary field missing: %v", tt.Texts())
+	}
+	status, ok := tt.Find("状态")
+	if !ok {
+		t.Fatalf("status title missing: %v", tt.Texts())
+	}
+	diff, ok := tt.Find("差异")
+	if !ok {
+		t.Fatalf("diff title missing: %v", tt.Texts())
+	}
+	if summary.X >= status.X {
+		t.Fatalf("commit must be left of status: summary=%v status=%v", summary, status)
+	}
+	if diff.Y <= summary.Y {
+		t.Fatalf("diff must be below commit: summary=%v diff=%v", summary, diff)
+	}
+	if diff.X >= status.X {
+		t.Fatalf("diff must be left of status: diff=%v status=%v", diff, status)
 	}
 }

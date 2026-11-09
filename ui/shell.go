@@ -49,7 +49,7 @@ func (a *root) topBar(c *ui.Context) {
 
 func (a *root) statusPane(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
+	ui.Column(c).Fill().Children(func() {
 		a.paneTitle(c, "状态", fmt.Sprintf("%d 个变更", a.status.Total()))
 		if a.statusErr != "" {
 			ui.Text(c, a.statusErr).FontSize(12).TextColor(t.Danger).Padding(12)
@@ -118,34 +118,36 @@ func (a *root) statusRow(c *ui.Context, i int) {
 func (a *root) commitPane(c *ui.Context) {
 	t := c.Theme()
 	staged := a.status.Count(gitx.Staged)
-	ui.Column(c).Fill().Padding(12).Gap(10).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, "提交信息").FontSize(13).Bold()
-			ui.Text(c, fmt.Sprintf("已暂存 %d", staged)).FontSize(11).TextColor(t.TextMuted).Grow(1)
-		})
-		ui.Column(c).Fill().BorderWidth(1).BorderColor(t.Border).Radius(8).Clip().Children(func() {
-			editor.View(c, &a.msgView).Fill().Padding(8)
-		})
-		if a.commitErr != "" {
-			ui.Text(c, a.commitErr).FontSize(12).TextColor(t.Danger).SingleLine().
-				Tooltip(a.commitErr)
-		} else if a.note != "" {
-			ui.Text(c, a.note).FontSize(12).TextColor(t.Success).SingleLine().Tooltip(a.note)
-		}
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Checkbox(c, &a.amend, "修正上次")
-			ui.Text(c, "第一行是摘要").FontSize(11).TextColor(t.TextMuted).Grow(1)
-			label := "提交"
-			if a.commitBusy {
-				label = "提交中…"
+	ui.Column(c).Fill().Children(func() {
+		a.paneTitle(c, "提交信息", fmt.Sprintf("已暂存 %d", staged))
+		ui.Column(c).Fill().Padding(12).Gap(8).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.TextInput(c, &a.summary).Fill().Height(30).Placeholder("提交摘要").
+					Label("提交摘要")
+				label := "提交"
+				if a.commitBusy {
+					label = "提交中…"
+				}
+				can := !a.commitBusy && strings.TrimSpace(a.summary) != "" &&
+					(staged > 0 || a.amend)
+				if ui.PrimaryButton(c, label).Disabled(!can).Clicked() {
+					a.doCommit()
+				}
+			})
+			ui.Column(c).Fill().BorderWidth(1).BorderColor(t.Border).Radius(8).Clip().Children(func() {
+				editor.View(c, &a.bodyView).Fill().Padding(8)
+			})
+			if a.commitErr != "" {
+				ui.Text(c, a.commitErr).FontSize(12).TextColor(t.Danger).SingleLine().
+					Tooltip(a.commitErr)
+			} else if a.note != "" {
+				ui.Text(c, a.note).FontSize(12).TextColor(t.Success).SingleLine().Tooltip(a.note)
 			}
-			can := !a.commitBusy && strings.TrimSpace(a.msg.String()) != "" &&
-				(staged > 0 || a.amend)
-			if ui.PrimaryButton(c, label).Disabled(!can).Clicked() {
-				a.doCommit()
-			}
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Checkbox(c, &a.amend, "修正上次")
+				ui.Text(c, "Ctrl+↵ 提交").FontSize(11).TextColor(t.TextMuted).Grow(1)
+			})
 		})
-		ui.Text(c, "Ctrl+↵ 提交").FontSize(11).TextColor(t.TextMuted)
 	})
 }
 
@@ -154,9 +156,8 @@ func (a *root) diffPane(c *ui.Context) {
 	ui.Column(c).Fill().Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			if a.diffPath == "" {
-				ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
-			} else {
+			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
+			if a.diffPath != "" {
 				ui.Text(c, gitx.DisplayPath(a.diffPath)).FontSize(12).Bold().SingleLine()
 				ui.Text(c, a.diffGroup.String()).FontSize(11).TextColor(t.TextMuted)
 				if a.diffAdded > 0 {
