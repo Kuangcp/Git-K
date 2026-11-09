@@ -1,0 +1,21 @@
+# 二进制与发布产物
+/git-k
+/dist/
+/build/
+
+# Go
+*.test
+*.out
+*.prof
+coverage.txt
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*~
+
+# 本地日志与临时文件
+*.log
+/tmp/

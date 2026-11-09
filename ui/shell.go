@@ -1,0 +1,266 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
+
+	"git-k/app/gitx"
+)
+
+func (a *root) topBar(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).Height(46).PaddingX(14).Gap(10).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+		ui.Text(c, "git-k").FontSize(14).Bold()
+		ui.Text(c, a.repo.Name).FontSize(13).TextColor(t.TextMuted).SingleLine()
+		ui.Text(c, a.repo.Root).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1)
+
+		branch := a.status.Branch
+		if branch == "" {
+			branch = "(无分支)"
+		}
+		if a.status.Detached {
+			branch = "detached"
+		}
+		ui.Row(c).Height(24).PaddingX(8).Radius(6).BorderWidth(1).BorderColor(t.Border).
+			AlignItems(ui.Center).Children(func() {
+			ui.Text(c, branch).FontSize(12).SingleLine()
+		})
+		if a.status.Ahead > 0 || a.status.Behind > 0 {
+			ui.Text(c, fmt.Sprintf("↑%d ↓%d", a.status.Ahead, a.status.Behind)).
+				FontSize(11).TextColor(t.TextMuted)
+		}
+
+		if ui.Button(c, "全部暂存").Disabled(a.busy || a.status.Total() == 0).Clicked() {
+			a.stageAll()
+		}
+		if ui.Button(c, "全部取消").Disabled(a.busy || !a.status.HasStaged()).Clicked() {
+			a.unstageAll()
+		}
+		if ui.Button(c, "刷新").Clicked() {
+			a.refreshStatus()
+		}
+	})
+}
+
+func (a *root) statusPane(c *ui.Context) {
+	t := c.Theme()
+	ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
+		a.paneTitle(c, "状态", fmt.Sprintf("%d 个变更", a.status.Total()))
+		if a.statusErr != "" {
+			ui.Text(c, a.statusErr).FontSize(12).TextColor(t.Danger).Padding(12)
+			return
+		}
+		if len(a.entries) == 0 {
+			if !a.loaded {
+				ui.Text(c, "正在读取状态…").FontSize(12).TextColor(t.TextMuted).Padding(12)
+			} else {
+				ui.Text(c, "工作区干净").FontSize(12).TextColor(t.TextMuted).Padding(12)
+			}
+			return
+		}
+		a.list.Key = func(i int) any { return a.entries[i].key }
+		a.list.Label = func(i int) string {
+			e := a.entries[i]
+			if e.header {
+				return e.title
+			}
+			return gitx.DisplayPath(e.row.Path)
+		}
+		a.list.Header = func(i int) bool { return a.entries[i].header }
+		ui.List(c, &a.list, len(a.entries), func(i int) {
+			a.statusRow(c, i)
+		}).Grow(1).Padding(0, 4)
+	})
+}
+
+func (a *root) statusRow(c *ui.Context, i int) {
+	t := c.Theme()
+	e := a.entries[i]
+	if e.header {
+		ui.Row(c).Height(28).PaddingX(12).AlignItems(ui.Center).Background(t.Surface).Children(func() {
+			ui.Text(c, e.title).FontSize(11).Bold().TextColor(t.TextMuted)
+			ui.Text(c, fmt.Sprintf(" %d", e.count)).FontSize(11).TextColor(t.TextMuted).Grow(1)
+		})
+		return
+	}
+	row := ui.Row(c).Height(28).PaddingX(12).Gap(8).AlignItems(ui.Center)
+	row.ContextMenu(func(m *ui.Menu) {
+		if e.row.Group == gitx.Staged {
+			if m.Item("取消暂存").Chosen() {
+				a.changeIndex([]gitx.Row{e.row}, true)
+			}
+		} else {
+			if m.Item("暂存").Chosen() {
+				a.changeIndex([]gitx.Row{e.row}, false)
+			}
+		}
+		m.Separator()
+		if m.Item("复制路径").Chosen() {
+			mygo.Clipboard.WriteText(e.row.Path)
+		}
+	})
+	row.Children(func() {
+		ui.Text(c, string(e.row.Code)).Width(16).FontSize(12).Bold().
+			TextColor(codeColor(t, e.row.Code))
+		ui.Text(c, gitx.DisplayPath(e.row.Path)).FontSize(13).SingleLine().Grow(1)
+		if e.row.OldPath != "" {
+			ui.Text(c, "← "+gitx.DisplayPath(e.row.OldPath)).FontSize(11).
+				TextColor(t.TextMuted).SingleLine()
+		}
+	})
+}
+
+func (a *root) commitPane(c *ui.Context) {
+	t := c.Theme()
+	staged := a.status.Count(gitx.Staged)
+	ui.Column(c).Fill().Padding(12).Gap(10).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Text(c, "提交信息").FontSize(13).Bold()
+			ui.Text(c, fmt.Sprintf("已暂存 %d", staged)).FontSize(11).TextColor(t.TextMuted).Grow(1)
+		})
+		ui.Column(c).Fill().BorderWidth(1).BorderColor(t.Border).Radius(8).Clip().Children(func() {
+			editor.View(c, &a.msgView).Fill().Padding(8)
+		})
+		if a.commitErr != "" {
+			ui.Text(c, a.commitErr).FontSize(12).TextColor(t.Danger).SingleLine().
+				Tooltip(a.commitErr)
+		} else if a.note != "" {
+			ui.Text(c, a.note).FontSize(12).TextColor(t.Success).SingleLine().Tooltip(a.note)
+		}
+		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Checkbox(c, &a.amend, "修正上次")
+			ui.Text(c, "第一行是摘要").FontSize(11).TextColor(t.TextMuted).Grow(1)
+			label := "提交"
+			if a.commitBusy {
+				label = "提交中…"
+			}
+			can := !a.commitBusy && strings.TrimSpace(a.msg.String()) != "" &&
+				(staged > 0 || a.amend)
+			if ui.PrimaryButton(c, label).Disabled(!can).Clicked() {
+				a.doCommit()
+			}
+		})
+		ui.Text(c, "Ctrl+↵ 提交").FontSize(11).TextColor(t.TextMuted)
+	})
+}
+
+func (a *root) diffPane(c *ui.Context) {
+	t := c.Theme()
+	ui.Column(c).Fill().Children(func() {
+		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
+			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
+			if a.diffPath == "" {
+				ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
+			} else {
+				ui.Text(c, gitx.DisplayPath(a.diffPath)).FontSize(12).Bold().SingleLine()
+				ui.Text(c, a.diffGroup.String()).FontSize(11).TextColor(t.TextMuted)
+				if a.diffAdded > 0 {
+					ui.Text(c, fmt.Sprintf("+%d", a.diffAdded)).FontSize(11).TextColor(t.Success)
+				}
+				if a.diffDeleted > 0 {
+					ui.Text(c, fmt.Sprintf("−%d", a.diffDeleted)).FontSize(11).TextColor(t.Danger)
+				}
+			}
+			ui.Text(c, "").Grow(1)
+			if a.diffLoading {
+				ui.Text(c, "读取中…").FontSize(11).TextColor(t.TextMuted)
+			}
+		})
+		switch a.diffMode {
+		case diffError:
+			ui.Column(c).Fill().Center().Padding(16).Children(func() {
+				ui.Text(c, "无法显示差异").FontSize(12).Bold()
+				ui.Text(c, a.diffErr).FontSize(11).TextColor(t.Danger).SingleLine().Tooltip(a.diffErr)
+			})
+		case diffBinary:
+			ui.Column(c).Fill().Center().Gap(6).Children(func() {
+				ui.Text(c, "二进制文件").FontSize(13).Bold()
+				ui.Text(c, fmt.Sprintf("+%d −%d（按行统计）", a.diffAdded, a.diffDeleted)).
+					FontSize(11).TextColor(t.TextMuted)
+			})
+		case diffEmpty:
+			ui.Column(c).Fill().Center().Children(func() {
+				ui.Text(c, "没有可显示的差异").FontSize(12).TextColor(t.TextMuted)
+			})
+		case diffRaw:
+			editor.View(c, &a.rawView).Fill()
+		case diffPatch:
+			editor.DiffView(c, &a.diff).Fill()
+		default:
+			ui.Column(c).Fill().Center().Children(func() {
+				switch {
+				case a.diffLoading:
+					ui.Text(c, "正在读取差异…").FontSize(12).TextColor(t.TextMuted)
+				case a.loaded && a.status.Total() == 0:
+					ui.Text(c, "工作区干净，没有差异").FontSize(12).TextColor(t.TextMuted)
+				default:
+					ui.Text(c, "选择一个文件查看差异").FontSize(12).TextColor(t.TextMuted)
+				}
+			})
+		}
+	})
+}
+
+func (a *root) footer(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
+		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
+		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · F5 刷新").
+			FontSize(11).TextColor(t.TextMuted).Grow(1)
+		if a.status.Upstream != "" {
+			ui.Text(c, a.status.Upstream).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		}
+	})
+}
+
+func (a *root) noRepo(c *ui.Context) {
+	t := c.Theme()
+	ui.Column(c).Fill().Center().Gap(12).Padding(32).Children(func() {
+		ui.Text(c, "git-k").FontSize(28).Bold()
+		ui.Text(c, "原生 Git 客户端").FontSize(13).TextColor(t.TextMuted)
+		if a.openErr != "" {
+			ui.Text(c, a.openErr).FontSize(12).TextColor(t.Danger).SingleLine().Tooltip(a.openErr)
+		}
+		ui.Row(c).Gap(10).Children(func() {
+			if ui.PrimaryButton(c, "选择仓库…").Clicked() {
+				a.chooseRepo()
+			}
+			if ui.Button(c, "使用当前目录").Clicked() {
+				a.openRepo("")
+			}
+		})
+		ui.Text(c, "也可以这样启动：git-k /path/to/repo").FontSize(11).TextColor(t.TextMuted)
+	})
+}
+
+func (a *root) paneTitle(c *ui.Context, title, meta string) {
+	t := c.Theme()
+	ui.Row(c).Height(38).PaddingX(12).AlignItems(ui.Center).Gap(8).
+		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+		ui.Text(c, title).FontSize(13).Bold()
+		ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).Grow(1)
+	})
+}
+
+func codeColor(t *ui.Theme, code byte) ui.Color {
+	switch code {
+	case 'A':
+		return t.Success
+	case 'D':
+		return t.Danger
+	case 'U':
+		return t.Danger
+	case 'M', 'T':
+		return t.Warning
+	case 'R', 'C':
+		return t.Accent
+	case '?':
+		return t.TextMuted
+	}
+	return t.Text
+}
