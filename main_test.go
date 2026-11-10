@@ -8,19 +8,33 @@ import (
 )
 
 // TestAppIconPixels 验证图标真的画出来了：浅色圆角底 + 紫→蓝渐变的 K。
-func TestRepoDir(t *testing.T) {
+func TestParseArgs(t *testing.T) {
 	for _, c := range []struct {
-		open, arg, want string
-		ok              bool
+		name    string
+		args    []string
+		wd      string
+		wantDir string
+		wantVer bool
+		wantErr bool
 	}{
-		{"", "", "", true},
-		{"test-repo", "", "test-repo", true},
-		{"", "/tmp/other", "/tmp/other", true},
-		{"a", "b", "", false},
+		{"cwd", nil, "/work", "/work", false, false},
+		{"d relative", []string{"-d", "test-repo"}, "/work", "/work/test-repo", false, false},
+		{"d absolute", []string{"-d", "/tmp/repo"}, "/work", "/tmp/repo", false, false},
+		{"positional", []string{"repo"}, "/work", "/work/repo", false, false},
+		{"version", []string{"-version"}, "/work", "/work", true, false},
+		{"two paths", []string{"a", "b"}, "/work", "", false, true},
+		{"d and path", []string{"-d", "a", "b"}, "/work", "", false, true},
+		{"unknown flag", []string{"-nope"}, "/work", "", false, true},
 	} {
-		got, ok := repoDir(c.open, c.arg)
-		if got != c.want || ok != c.ok {
-			t.Fatalf("repoDir(%q, %q) = %q, %v; want %q, %v", c.open, c.arg, got, ok, c.want, c.ok)
+		got, err := parseArgs(c.args, c.wd)
+		if (err != nil) != c.wantErr {
+			t.Fatalf("%s: err=%v, wantErr=%v", c.name, err, c.wantErr)
+		}
+		if err != nil {
+			continue
+		}
+		if got.dir != c.wantDir || got.version != c.wantVer {
+			t.Fatalf("%s: %+v, want dir=%q version=%v", c.name, got, c.wantDir, c.wantVer)
 		}
 	}
 }

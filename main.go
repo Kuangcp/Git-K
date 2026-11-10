@@ -2,10 +2,13 @@ package main
 
 import (
 	_ "embed"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/egoist/mygo"
 	mygoUI "github.com/egoist/mygo/ui"
@@ -19,27 +22,29 @@ var appIconPNG []byte
 
 var version = "dev"
 
+// options is one launch's command line, whether from this process or
+// forwarded by a single-instance handoff.
+type options struct {
+	dir     string
+	version bool
+}
+
 func main() {
-	showVersion := flag.Bool("version", false, "打印版本号后退出")
-	openDir := flag.String("d", "", "打开指定目录所在的 Git 仓库")
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "用法: git-k [-d 仓库目录] [仓库路径]\n")
-		flag.PrintDefaults()
+	wd, _ := os.Getwd()
+	opts, err := parseArgs(os.Args[1:], wd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "git-k: %v\n", err)
+		printUsage()
+		os.Exit(2)
 	}
-	flag.Parse()
-	if *showVersion {
+	if opts.version {
 		fmt.Println("Git-K", version)
 		return
 	}
 
-	if len(flag.Args()) > 1 {
-		flag.Usage()
-		os.Exit(1)
-	}
-	dir, ok := repoDir(*openDir, flag.Arg(0))
-	if !ok {
-		flag.Usage()
-		os.Exit(1)
+	mygo.App.SetName("Git-K")
+	if !mygo.App.RequestSingleInstanceLock() {
+		return // the running instance got the arguments and focuses its tab
 	}
 
 	store, err := settings.Open(settings.DefaultPath())
@@ -55,15 +60,25 @@ func main() {
 	defer saveSettings()
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { saveSettings() })
 
+	app := ui.NewApp(store)
+	mygo.App.OnSecondInstance(func(args []string, wd string) {
+		next, err := parseArgs(args, wd)
+		if err != nil {
+			log.Printf("忽略启动参数: %v", err)
+			app.OpenAndFocus(wd)
+			return
+		}
+		app.OpenAndFocus(next.dir)
+	})
+
 	mygo.App.WhenReady(func() {
-		r := ui.NewRootLazy(dir, store)
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Git-K",
 			Width:     1280,
 			Height:    820,
 			MinWidth:  760,
 			MinHeight: 520,
-			Content:   mygoUI.View(r.View),
+			Content:   mygoUI.View(app.View),
 		})
 		if err := win.SetIcon(appIconPNG); err != nil {
 			log.Printf("设置窗口图标失败: %v", err)
@@ -71,21 +86,48 @@ func main() {
 		if mygo.App.Dock != nil {
 			_ = mygo.App.Dock.SetIcon(appIconPNG)
 		}
-		r.Attach(win)
+		app.Attach(win)
+		app.OpenAndFocus(opts.dir)
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// repoDir picks the directory to open: -d wins over a positional path,
-// and giving both is an error.
-func repoDir(openDir, arg string) (string, bool) {
-	if openDir != "" && arg != "" {
-		return "", false
+// parseArgs reads -d, -version and a positional repository path. Relative
+// paths are relative to wd, which is this process's or the launching
+// process's directory.
+func parseArgs(args []string, wd string) (options, error) {
+	fs := flag.NewFlagSet("git-k", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	showVersion := fs.Bool("version", false, "打印版本号后退出")
+	openDir := fs.String("d", "", "打开指定目录所在的 Git 仓库")
+	if err := fs.Parse(args); err != nil {
+		return options{}, err
 	}
-	if openDir != "" {
-		return openDir, true
+	if fs.NArg() > 1 {
+		return options{}, errors.New("只能指定一个仓库路径")
 	}
-	return arg, true
+	if *openDir != "" && fs.NArg() > 0 {
+		return options{}, errors.New("-d 与仓库路径只能给一个")
+	}
+	dir := *openDir
+	if dir == "" && fs.NArg() == 1 {
+		dir = fs.Arg(0)
+	}
+	if dir == "" {
+		dir = wd
+	}
+	if dir != "" && wd != "" && !filepath.IsAbs(dir) {
+		dir = filepath.Join(wd, dir)
+	}
+	return options{dir: dir, version: *showVersion}, nil
+}
+
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "用法: git-k [-d 仓库目录] [仓库路径]")
+	fmt.Fprintln(os.Stderr, "  -d string")
+	fmt.Fprintln(os.Stderr, "    \t打开指定目录所在的 Git 仓库")
+	fmt.Fprintln(os.Stderr, "  -version")
+	fmt.Fprintln(os.Stderr, "    \t打印版本号后退出")
 }

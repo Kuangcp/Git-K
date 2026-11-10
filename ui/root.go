@@ -31,9 +31,13 @@ type listEntry struct {
 // the main thread; git runs on goroutines and reports back through
 // Window.Update.
 type root struct {
-	win  *mygo.Window
-	repo *gitx.Repo
-	quit func()
+	win      *mygo.Window
+	repo     *gitx.Repo
+	quit     func()
+	onTitle  func()
+	openTab  func(string)
+	pickRepo func()
+	closed   bool
 
 	status    gitx.Status
 	entries   []listEntry
@@ -145,12 +149,7 @@ func newRoot(dir string, st *settings.Store, lazy bool) *root {
 		quit:          mygo.App.Quit,
 		settings:      st,
 	}
-	if st != nil {
-		l := st.Config().Layout
-		a.sidePercent = layoutPercent(l.SidePercent, a.sidePercent)
-		a.commitPercent = layoutPercent(l.CommitPercent, a.commitPercent)
-		a.savedLayout = l
-	}
+	a.loadLayout()
 	a.body = editor.NewBuffer("")
 	a.bodyView = editor.State{
 		Buffer:      a.body,
@@ -259,6 +258,9 @@ func clampPercent(v float32) float32 {
 
 // update runs fn on the main thread, or at once in a test with no window.
 func (a *root) update(fn func()) {
+	if a.closed {
+		return
+	}
 	if a.win == nil {
 		fn()
 		return
@@ -276,8 +278,20 @@ func (a *root) background(fn func()) {
 }
 
 func (a *root) updateTitle() {
+	if a.onTitle != nil {
+		a.onTitle()
+		return
+	}
 	if a.win == nil || a.repo == nil {
 		return
+	}
+	a.win.SetTitle(repoTitle(a))
+}
+
+// repoTitle is the window title for a repository tab.
+func repoTitle(a *root) string {
+	if a.repo == nil {
+		return "Git-K"
 	}
 	branch := a.status.Branch
 	if branch == "" {
@@ -286,7 +300,19 @@ func (a *root) updateTitle() {
 	if a.status.Detached {
 		branch = "detached"
 	}
-	a.win.SetTitle(fmt.Sprintf("%s — %s — Git-K", a.repo.Name, branch))
+	return fmt.Sprintf("%s — %s — Git-K", a.repo.Name, branch)
+}
+
+// loadLayout takes the shared split ratios, as another tab may have moved
+// them since this tab was built.
+func (a *root) loadLayout() {
+	if a.settings == nil {
+		return
+	}
+	l := a.settings.Config().Layout
+	a.sidePercent = layoutPercent(l.SidePercent, a.sidePercent)
+	a.commitPercent = layoutPercent(l.CommitPercent, a.commitPercent)
+	a.savedLayout = l
 }
 
 func (a *root) openRepo(dir string) {
@@ -1088,6 +1114,12 @@ func (a *root) stopWatch() {
 	a.watchOn = false
 }
 
+// close detaches a tab: stop watching and drop results still in flight.
+func (a *root) close() {
+	a.closed = true
+	a.stopWatch()
+}
+
 var heavyDirs = map[string]bool{
 	"node_modules": true,
 	"vendor":       true,
@@ -1184,6 +1216,12 @@ func (a *root) chooseRepo() {
 		if err != nil || len(paths) == 0 {
 			return
 		}
-		win.Update(func() { a.openRepo(paths[0]) })
+		win.Update(func() {
+			if a.openTab != nil {
+				a.openTab(paths[0])
+				return
+			}
+			a.openRepo(paths[0])
+		})
 	}()
 }

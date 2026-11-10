@@ -10,7 +10,9 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
   不加载 HTML/JS。不要给 `mygo.json` 打开 webview。
 - **Go 1.27.3 / mygo v0.8.3**：`go.mod` 固定 mygo 版本，和 `db-g` 一致。升级前先跑
   `go test ./...` 和一次真实窗口冒烟。
-- **单仓库、单窗口**：一个进程打开一个工作树。不要引入全局仓库状态。
+- **单窗口、多标签**：一个进程一个窗口，每个 tab 绑定一个工作树；同一仓库只能有一个
+  tab（按规范化后的 `git rev-parse --show-toplevel` 去重）。窗口级共享状态只放在
+  `ui.App`，仓库级状态放各自的 `ui.root`。
 - **git 后端是 CLI**：所有操作走 `git` 子进程，不实现对象数据库，也不引入 go-git。
   这样行为、错误信息和钩子都与用户命令行里的 git 一致。
 - **图标**：`assets/icon.svg` 是设计源；`tools/genicon` 用 `x/image/vector` 按同一
@@ -54,17 +56,27 @@ app/settings/        通用 JSON 配置存储：默认值、合并、防抖原�
   stage.go           add / restore --staged / unborn 的 rm --cached
   commit.go          commit -F -、amend、GIT_K_MSG 草稿
 ui/                  窗口状态与视图
-  root.go            根状态、刷新、异步、watch、快捷键、git 动作
+  app.go             单窗口多 tab：去重、切换、关闭、标题、单实例请求
+  root.go            单个 tab 的状态、刷新、异步、watch、快捷键、git 动作
   shell.go           顶栏、状态列表、提交面板、diff 面板、空态
+ui/app_test.go       tab 去重/切换/共享布局测试
 ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 ```
 
 ## 数据流与线程
 
-- 视图是状态的纯函数：`root.View(c)` 只读 `root` 的字段、发请求，不阻塞。
+- 视图是状态的纯函数：`App.View(c)` 画 tab 条和当前 tab；`root.View(c)` 只读
+  `root` 的字段、发请求，不阻塞。
 - 启动顺序：`NewRootLazy` 只打开仓库，窗口先显示；`Attach` 后异步读第一次
   status。文件监听在第一次 status 回来后才启动，避免和窗口抢 CPU。测试用
   `NewRoot`（同步）保持确定性。
+- 单实例：`main` 先 `RequestSingleInstanceLock`，后启动的进程把 args + cwd 转给
+  第一个进程后退出；`OnSecondInstance` 解析参数、按仓库根去重 tab、切换并
+  `win.Show/Focus`。转发路径相对第二个进程的 cwd 解析。
+- tab：`App.open` 用 `NewRootLazy` 打开仓库，`canonicalKey` 解析 symlink 后比较；
+  同仓库直接激活已有 tab。顶栏「打开仓库…」走同一个入口。关闭 tab 调
+  `root.close`，异步结果经 `closed` 丢弃。打开失败用 `Context.Toast` 提示，不弹确认框。
+- 布局比例是所有 tab 共享的 `settings.Store` 值；切 tab 时 `root.loadLayout` 取最新。
 - git 查询/修改在 goroutine 里跑；结果只能通过 `root.update`（有窗口时是
   `Window.Update`，测试里同步执行）回主线程改状态。
 - 每个异步请求带 `gen`：`statusGen`、`diffGen`。回调先比 gen，旧结果直接丢弃。
@@ -170,8 +182,9 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 ## 当前范围与已知限制
 
 已实现：仓库发现、porcelain v2 状态四组、多选暂存/取消暂存/全部、三种 diff、
-编辑器草稿、commit/amend、文件监听刷新、快捷键、空态和错误提示。
+编辑器草稿、commit/amend、文件监听刷新、快捷键、空态和错误提示、单窗口多 tab、
+单实例启动与命令行转交。
 
 未实现（不要假装支持）：部分暂存（hunk/line）、历史/log、分支切换、stash、
 merge/rebase/cherry-pick 操作、冲突 combined diff 的专用渲染、图片 diff、
-子模块操作、提交模板/签名/spellcheck、多窗口/多仓库。
+子模块操作、提交模板/签名/spellcheck、多窗口。
