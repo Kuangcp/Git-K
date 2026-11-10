@@ -76,11 +76,14 @@ func (a *root) statusPane(c *ui.Context) {
 		a.list.Header = func(i int) bool { return a.entries[i].header }
 		var toggle listEntry
 		hasToggle := false
-		ui.List(c, &a.list, len(a.entries), func(i int) {
+		list := ui.List(c, &a.list, len(a.entries), func(i int) {
 			if a.statusRow(c, i) {
 				toggle, hasToggle = a.entries[i], true
 			}
 		}).Grow(1).Padding(0, 4)
+		if list.Changed() {
+			a.clearGroup()
+		}
 		// 双击在列表构建完后处理：暂存会同步刷新 entries，构建中改会越界。
 		if hasToggle && !a.busy {
 			a.toggleRow(toggle)
@@ -93,10 +96,17 @@ func (a *root) statusRow(c *ui.Context, i int) bool {
 	t := c.Theme()
 	e := a.entries[i]
 	if e.header {
-		ui.Row(c).Height(28).PaddingX(12).AlignItems(ui.Center).Background(t.Surface).Children(func() {
-			ui.Text(c, e.title).FontSize(11).Bold().TextColor(t.TextMuted)
-			ui.Text(c, fmt.Sprintf(" %d", e.count)).FontSize(11).TextColor(t.TextMuted).Grow(1)
-		})
+		bg, fg := t.Surface, t.TextMuted
+		if g, ok := a.groupActive(); ok && g == e.group {
+			bg, fg = t.SurfaceHover, t.Accent
+		}
+		header := ui.Button(c, fmt.Sprintf("%s %d", e.title, e.count)).
+			Fill().Height(28).PaddingX(12).PaddingY(0).Justify(ui.Start).TextAlign(ui.Start).
+			FontSize(11).Bold().Background(bg).BorderWidth(0).Radius(0).TextColor(fg)
+		if header.Clicked() {
+			a.selectGroup(e.group)
+			c.Invalidate()
+		}
 		return false
 	}
 	row := ui.Row(c).Height(28).PaddingX(12).Gap(8).AlignItems(ui.Center)
@@ -258,9 +268,16 @@ func (a *root) diffPane(c *ui.Context) {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
-			if a.diffPath != "" {
+			g, groupMode := a.groupActive()
+			switch {
+			case groupMode:
+				ui.Text(c, fmt.Sprintf("%d 个文件", len(a.groupDiffs))).FontSize(12).Bold().SingleLine()
+				ui.Text(c, g.String()).FontSize(11).TextColor(t.TextMuted)
+			case a.diffPath != "":
 				ui.Text(c, gitx.DisplayPath(a.diffPath)).FontSize(12).Bold().SingleLine()
 				ui.Text(c, a.diffGroup.String()).FontSize(11).TextColor(t.TextMuted)
+			}
+			if groupMode || a.diffPath != "" {
 				if a.diffAdded > 0 {
 					ui.Text(c, fmt.Sprintf("+%d", a.diffAdded)).FontSize(11).TextColor(t.Success)
 				}
@@ -273,38 +290,73 @@ func (a *root) diffPane(c *ui.Context) {
 				ui.Text(c, "读取中…").FontSize(11).TextColor(t.TextMuted)
 			}
 		})
-		switch a.diffMode {
-		case diffError:
-			ui.Column(c).Fill().Center().Padding(16).Children(func() {
-				ui.Text(c, "无法显示差异").FontSize(12).Bold()
-				ui.Text(c, a.diffErr).FontSize(11).TextColor(t.Danger).SingleLine().Tooltip(a.diffErr)
-			})
-		case diffBinary:
-			ui.Column(c).Fill().Center().Gap(6).Children(func() {
-				ui.Text(c, "二进制文件").FontSize(13).Bold()
-				ui.Text(c, fmt.Sprintf("+%d −%d（按行统计）", a.diffAdded, a.diffDeleted)).
-					FontSize(11).TextColor(t.TextMuted)
-			})
-		case diffEmpty:
-			ui.Column(c).Fill().Center().Children(func() {
-				ui.Text(c, "没有可显示的差异").FontSize(12).TextColor(t.TextMuted)
-			})
-		case diffRaw:
-			editor.View(c, &a.rawView).Fill()
-		case diffPatch:
-			editor.DiffView(c, &a.diff).Fill()
-		default:
-			ui.Column(c).Fill().Center().Children(func() {
-				switch {
-				case a.diffLoading:
+		if _, ok := a.groupActive(); ok {
+			if a.diffLoading {
+				ui.Column(c).Fill().Center().Children(func() {
 					ui.Text(c, "正在读取差异…").FontSize(12).TextColor(t.TextMuted)
-				case a.loaded && a.status.Total() == 0:
-					ui.Text(c, "工作区干净，没有差异").FontSize(12).TextColor(t.TextMuted)
-				default:
-					ui.Text(c, "选择一个文件查看差异").FontSize(12).TextColor(t.TextMuted)
-				}
-			})
+				})
+			} else {
+				a.groupDiffPane(c)
+			}
+		} else {
+			switch a.diffMode {
+			case diffError:
+				ui.Column(c).Fill().Center().Padding(16).Children(func() {
+					ui.Text(c, "无法显示差异").FontSize(12).Bold()
+					ui.Text(c, a.diffErr).FontSize(11).TextColor(t.Danger).SingleLine().Tooltip(a.diffErr)
+				})
+			case diffBinary:
+				ui.Column(c).Fill().Center().Gap(6).Children(func() {
+					ui.Text(c, "二进制文件").FontSize(13).Bold()
+					ui.Text(c, fmt.Sprintf("+%d −%d（按行统计）", a.diffAdded, a.diffDeleted)).
+						FontSize(11).TextColor(t.TextMuted)
+				})
+			case diffEmpty:
+				ui.Column(c).Fill().Center().Children(func() {
+					ui.Text(c, "没有可显示的差异").FontSize(12).TextColor(t.TextMuted)
+				})
+			case diffRaw:
+				editor.View(c, &a.rawView).Fill()
+			case diffPatch:
+				editor.DiffView(c, &a.diff).Fill()
+			default:
+				ui.Column(c).Fill().Center().Children(func() {
+					switch {
+					case a.diffLoading:
+						ui.Text(c, "正在读取差异…").FontSize(12).TextColor(t.TextMuted)
+					case a.loaded && a.status.Total() == 0:
+						ui.Text(c, "工作区干净，没有差异").FontSize(12).TextColor(t.TextMuted)
+					default:
+						ui.Text(c, "选择一个文件查看差异").FontSize(12).TextColor(t.TextMuted)
+					}
+				})
+			}
 		}
+	})
+}
+
+// groupDiffPane stacks the group's diffstat and each file's diff, which
+// keep the single-file view's colors.
+func (a *root) groupDiffPane(c *ui.Context) {
+	t := c.Theme()
+	ui.Scroll(c).Fill().Children(func() {
+		ui.Column(c).FillWidth().Padding(12).Gap(10).Children(func() {
+			if a.groupStat.LineCount() > 0 {
+				editor.View(c, &a.groupStatView).FillWidth()
+			}
+			for i := range a.groupFiles {
+				f := &a.groupFiles[i]
+				ui.Text(c, gitx.DisplayPath(f.path)).FontSize(12).Bold().SingleLine()
+				switch f.mode {
+				case diffPatch:
+					editor.DiffView(c, &f.diff).FillWidth()
+				case diffError:
+					ui.Text(c, f.raw.String()).FontSize(11).TextColor(t.Danger).SingleLine()
+				default:
+					editor.View(c, &f.view).FillWidth()
+				}
+			}
+		})
 	})
 }
 
@@ -312,7 +364,7 @@ func (a *root) footer(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新").
+		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新 · Ctrl+Q 退出").
 			FontSize(11).TextColor(t.TextMuted).Grow(1)
 		if a.status.Upstream != "" {
 			ui.Text(c, a.status.Upstream).FontSize(11).TextColor(t.TextMuted).SingleLine()

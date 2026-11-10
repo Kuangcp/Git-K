@@ -104,6 +104,14 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 - 双击状态行切换暂存：已修改/未跟踪 → 暂存，已暂存 → 取消暂存；冲突行不响应。
   双击用行元素的 `RowDoubleClicked`，动作在 `ui.List` 构建返回后执行，因为测试里
   暂存会同步刷新 `entries`。
+- 状态列表里的分组行（已暂存/冲突/已修改/未跟踪）本身可点：点击后 diff 区汇总
+  该组所有文件的 patch（`root.groupDiffs`），再点同一行或点文件行退出。分组行用
+  `ui.Button` 铺满整行来接收点击——`ListState.Header` 的行不参与命中测试。
+  汇总是可滚动的堆叠：顶部是 git 风格的 diffstat（`formatDiffStat`），下面是
+  每个文件的路径和独立的 `editor.DiffView`（`FitContent`），配色与单文件一致。
+  `editor.DiffState` 一次只接受一个文件，所以按文件各存一个 state。列表变选
+  （`List.Changed`）退出汇总。
+- `Ctrl+Q` 退出应用（`root.quit`，测试里替换为钩子）。
 - 右键菜单动作作用于多选：右键的行在选中集合里时，暂存/取消暂存/删除都作用于全部
   选中行（`root.actionRows`）；删除只取其中的未跟踪行。
 - 未跟踪行右键有「删除文件…」，先用 `ui.AlertDialog` 二次确认，再走

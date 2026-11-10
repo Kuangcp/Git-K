@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -342,6 +343,94 @@ func TestContextMenuDeletesSelection(t *testing.T) {
 	}
 	if got := r.status.Total(); got != 0 {
 		t.Fatalf("after delete: %d changes, want 0", got)
+	}
+}
+
+// Clicking the group bar shows every file of the group, and clicking
+// the active chip, or a file row, returns to one file.
+func TestGroupHeaderShowsAllDiffs(t *testing.T) {
+	dir := newRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("second\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+	bRow, ok := tt.Find("b.txt")
+	if !ok {
+		t.Fatalf("b.txt missing: %v", tt.Texts())
+	}
+
+	if err := tt.Click("未跟踪 2"); err != nil {
+		t.Fatalf("click group chip: %v", err)
+	}
+	tt.Frame()
+	if len(r.groupDiffs) != 2 {
+		t.Fatalf("group rows: %d, want 2", len(r.groupDiffs))
+	}
+	if r.cur != -1 || r.chosen.Len() != 0 {
+		t.Fatalf("file selection kept: cur=%d chosen=%d", r.cur, r.chosen.Len())
+	}
+	if len(r.groupFiles) != 2 {
+		t.Fatalf("group files: %d, want 2", len(r.groupFiles))
+	}
+	for i, want := range []string{"a.txt", "b.txt"} {
+		f := r.groupFiles[i]
+		if f.path != want || f.mode != diffPatch {
+			t.Fatalf("group file %d: path=%q mode=%v", i, f.path, f.mode)
+		}
+	}
+	stat := r.groupStat.String()
+	for _, want := range []string{"a.txt", "b.txt", "2 files changed", "2 insertions(+)"} {
+		if !strings.Contains(stat, want) {
+			t.Fatalf("group stat missing %q:\n%s", want, stat)
+		}
+	}
+	if !tt.HasText("2 个文件") {
+		t.Fatalf("group count missing: %v", tt.Texts())
+	}
+
+	// A status refresh keeps the group chosen.
+	r.refreshStatus()
+	tt.Frame()
+	if len(r.groupDiffs) != 2 || len(r.groupFiles) != 2 {
+		t.Fatalf("group lost after refresh: rows=%d files=%d", len(r.groupDiffs), len(r.groupFiles))
+	}
+
+	// Click the group row again to deselect
+	if err := tt.Click("未跟踪 2"); err != nil {
+		t.Fatalf("click group chip again: %v", err)
+	}
+	tt.Frame()
+	if len(r.groupDiffs) != 0 || r.diffPath != "a.txt" || r.diffMode != diffPatch {
+		t.Fatalf("after closing group: rows=%d path=%q mode=%v", len(r.groupDiffs), r.diffPath, r.diffMode)
+	}
+
+	// Reopen group and click a different file row to leave it
+	if err := tt.Click("未跟踪 2"); err != nil {
+		t.Fatalf("click group chip: %v", err)
+	}
+	tt.Frame()
+	tt.ClickAt(bRow.X+bRow.W/2, bRow.Y+bRow.H/2)
+	tt.Frame()
+	if len(r.groupDiffs) != 0 || r.diffPath != "b.txt" {
+		t.Fatalf("after clicking file: rows=%d path=%q", len(r.groupDiffs), r.diffPath)
+	}
+}
+
+// Ctrl+Q asks the application to quit.
+func TestQuitShortcut(t *testing.T) {
+	dir := newRepo(t)
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	quit := false
+	r.quit = func() { quit = true }
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+	tt.Key(ui.Ctrl, ui.KeyQ)
+	if !quit {
+		t.Fatal("Ctrl+Q did not quit")
 	}
 }
 
