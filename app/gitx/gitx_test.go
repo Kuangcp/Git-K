@@ -138,22 +138,25 @@ func TestDiffEscapedPathIsLiteral(t *testing.T) {
 	}
 }
 
-// RemoveFile deletes an untracked file, while git clean leaves a path in
-// the index alone.
-func TestRemoveFileUntrackedOnly(t *testing.T) {
+// RemoveFiles deletes untracked files in one call, while git clean leaves
+// a path in the index alone.
+func TestRemoveFilesUntrackedOnly(t *testing.T) {
 	ctx := context.Background()
 	repo, dir := newRepo(t)
 	write(t, dir, "loose.txt", "hello\n")
-	if err := repo.RemoveFile(ctx, "loose.txt"); err != nil {
+	write(t, dir, "other.txt", "hello\n")
+	if err := repo.RemoveFiles(ctx, []string{"loose.txt", "other.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "loose.txt")); !os.IsNotExist(err) {
-		t.Fatalf("untracked file still exists: %v", err)
+	for _, name := range []string{"loose.txt", "other.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("untracked file %s still exists: %v", name, err)
+		}
 	}
 
 	write(t, dir, "tracked.txt", "keep\n")
 	git(t, dir, "add", "tracked.txt")
-	if err := repo.RemoveFile(ctx, "tracked.txt"); err != nil {
+	if err := repo.RemoveFiles(ctx, []string{"tracked.txt"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "tracked.txt")); err != nil {

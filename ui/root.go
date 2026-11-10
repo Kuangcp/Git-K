@@ -46,8 +46,8 @@ type root struct {
 	commitErr  string
 	note       string
 
-	deletePath string
-	deleteAsk  bool
+	deletePaths []string
+	deleteAsk   bool
 
 	summary  string
 	body     *editor.Buffer
@@ -223,7 +223,7 @@ func (a *root) openRepo(dir string) {
 	a.resetDiff()
 	a.commitErr = ""
 	a.note = ""
-	a.deletePath = ""
+	a.deletePaths = nil
 	a.deleteAsk = false
 	summary, body := splitMessage(repo.CommitMessage())
 	a.summary = summary
@@ -496,6 +496,33 @@ func (a *root) selectedRows() []gitx.Row {
 		return []gitx.Row{row}
 	}
 	return nil
+}
+
+// actionRows returns the rows a context menu action applies to: all the
+// chosen rows when the row clicked is one of them, else that row alone.
+func (a *root) actionRows(row gitx.Row) []gitx.Row {
+	if a.chosen.Len() > 0 && a.chosen.Has(row.Key) {
+		return a.selectedRows()
+	}
+	return []gitx.Row{row}
+}
+
+// untrackedPaths returns the paths of the untracked rows among rows, in
+// order and once each.
+func untrackedPaths(rows []gitx.Row) []string {
+	seen := make(map[string]struct{}, len(rows))
+	var paths []string
+	for _, row := range rows {
+		if row.Group != gitx.Untracked {
+			continue
+		}
+		if _, ok := seen[row.Path]; ok {
+			continue
+		}
+		seen[row.Path] = struct{}{}
+		paths = append(paths, row.Path)
+	}
+	return paths
 }
 
 func (a *root) stageSelected() {

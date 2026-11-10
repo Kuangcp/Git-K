@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/egoist/mygo"
 	mygoUI "github.com/egoist/mygo/ui"
@@ -19,8 +20,9 @@ var version = "dev"
 
 func main() {
 	showVersion := flag.Bool("version", false, "打印版本号后退出")
+	openDir := flag.String("d", "", "打开指定目录所在的 Git 仓库")
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "用法: git-k [仓库路径]\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "用法: git-k [-d 仓库目录] [仓库路径]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -29,10 +31,14 @@ func main() {
 		return
 	}
 
-	dir := flag.Arg(0)
 	if len(flag.Args()) > 1 {
 		flag.Usage()
-		return
+		os.Exit(1)
+	}
+	dir, ok := repoDir(*openDir, flag.Arg(0))
+	if !ok {
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	mygo.App.WhenReady(func() {
@@ -56,4 +62,16 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// repoDir picks the directory to open: -d wins over a positional path,
+// and giving both is an error.
+func repoDir(openDir, arg string) (string, bool) {
+	if openDir != "" && arg != "" {
+		return "", false
+	}
+	if openDir != "" {
+		return openDir, true
+	}
+	return arg, true
 }

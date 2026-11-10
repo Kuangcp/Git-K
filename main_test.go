@@ -8,6 +8,23 @@ import (
 )
 
 // TestAppIconPixels 验证图标真的画出来了：浅色圆角底 + 紫→蓝渐变的 K。
+func TestRepoDir(t *testing.T) {
+	for _, c := range []struct {
+		open, arg, want string
+		ok              bool
+	}{
+		{"", "", "", true},
+		{"test-repo", "", "test-repo", true},
+		{"", "/tmp/other", "/tmp/other", true},
+		{"a", "b", "", false},
+	} {
+		got, ok := repoDir(c.open, c.arg)
+		if got != c.want || ok != c.ok {
+			t.Fatalf("repoDir(%q, %q) = %q, %v; want %q, %v", c.open, c.arg, got, ok, c.want, c.ok)
+		}
+	}
+}
+
 func TestAppIconPixels(t *testing.T) {
 	img, err := png.Decode(bytes.NewReader(appIconPNG))
 	if err != nil {

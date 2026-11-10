@@ -260,6 +260,91 @@ func TestDeleteUntrackedFileAsksFirst(t *testing.T) {
 	}
 }
 
+// A context menu action applies to every chosen row when the row clicked
+// is one of them.
+func TestContextMenuStagesSelection(t *testing.T) {
+	dir := newRepo(t)
+	for _, name := range []string{"b.txt", "z.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+
+	first, ok := tt.Find("?")
+	if !ok {
+		t.Fatalf("untracked code missing: %v", tt.Texts())
+	}
+	z, ok := tt.Find("z.txt")
+	if !ok {
+		t.Fatalf("z.txt missing: %v", tt.Texts())
+	}
+	tt.ClickAt(first.X+first.W/2, first.Y+first.H/2)
+	if err := tt.ClickWith(ui.Shift, "z.txt"); err != nil {
+		t.Fatalf("extend selection: %v", err)
+	}
+	tt.RightClickAt(z.X+z.W/2, z.Y+z.H/2)
+	if err := tt.ChooseMenuItem("暂存"); err != nil {
+		t.Fatalf("choose stage: %v", err)
+	}
+	tt.Frame()
+	if got := r.status.Count(gitx.Staged); got != 3 {
+		t.Fatalf("staged %d rows, want 3: %+v", got, r.status.Rows)
+	}
+	if got := r.status.Count(gitx.Untracked); got != 0 {
+		t.Fatalf("untracked %d rows, want 0", got)
+	}
+}
+
+func TestContextMenuDeletesSelection(t *testing.T) {
+	dir := newRepo(t)
+	for _, name := range []string{"b.txt", "z.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+
+	first, ok := tt.Find("?")
+	if !ok {
+		t.Fatalf("untracked code missing: %v", tt.Texts())
+	}
+	z, ok := tt.Find("z.txt")
+	if !ok {
+		t.Fatalf("z.txt missing: %v", tt.Texts())
+	}
+	tt.ClickAt(first.X+first.W/2, first.Y+first.H/2)
+	if err := tt.ClickWith(ui.Shift, "z.txt"); err != nil {
+		t.Fatalf("extend selection: %v", err)
+	}
+	tt.RightClickAt(z.X+z.W/2, z.Y+z.H/2)
+	if err := tt.ChooseMenuItem("删除 3 个文件…"); err != nil {
+		t.Fatalf("choose delete: %v", err)
+	}
+	tt.Frame()
+	if !tt.HasText("3 个未跟踪的文件") {
+		t.Fatalf("confirmation missing the count: %v", tt.Texts())
+	}
+	if err := tt.Click("删除"); err != nil {
+		t.Fatalf("click delete: %v", err)
+	}
+	tt.Frame()
+	for _, name := range []string{"a.txt", "b.txt", "z.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s still exists: %v", name, err)
+		}
+	}
+	if got := r.status.Total(); got != 0 {
+		t.Fatalf("after delete: %d changes, want 0", got)
+	}
+}
+
 func TestMessageComposition(t *testing.T) {
 	a := &root{summary: "feat: summary ", body: nil}
 	a.body = editor.NewBuffer("line one\nline two\n")

@@ -22,6 +22,7 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
 
 ```sh
 make run      # CGO_ENABLED=0 go run . [仓库路径]
+              # 也可 go run . -d <目录>：打开该目录所在的仓库，便于用 test-repo 调试
 make test     # CGO_ENABLED=0 go test ./...
 make vet      # CGO_ENABLED=0 go vet ./...
 make build    # 静态发布二进制 ./git-k（-trimpath -tags mygo_noinspector -s -w）
@@ -103,9 +104,11 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 - 双击状态行切换暂存：已修改/未跟踪 → 暂存，已暂存 → 取消暂存；冲突行不响应。
   双击用行元素的 `RowDoubleClicked`，动作在 `ui.List` 构建返回后执行，因为测试里
   暂存会同步刷新 `entries`。
+- 右键菜单动作作用于多选：右键的行在选中集合里时，暂存/取消暂存/删除都作用于全部
+  选中行（`root.actionRows`）；删除只取其中的未跟踪行。
 - 未跟踪行右键有「删除文件…」，先用 `ui.AlertDialog` 二次确认，再走
-  `Repo.RemoveFile`（`git clean -q -f -- <path>`）。`git clean` 不会删已跟踪或已忽略
-  的路径，状态过期也不会误删；失败写 `note`。
+  `Repo.RemoveFiles`（一次 `git clean -q -f -- <paths...>`）。`git clean` 不会删已跟踪
+  或已忽略的路径，状态过期也不会误删；失败写 `note`。
 - 状态字母 `A/M/D/R/C/U/?` 用主题语义色（`Success/Warning/Danger/Accent/TextMuted`），
   不要在组件里写死十六进制。已暂存的 `M` 和 `R` 用 `Success`，和暂存的新增一致；
   工作区的 `M` 仍用 `Warning`，未暂存的重命名仍用 `Accent`。

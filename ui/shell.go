@@ -103,21 +103,26 @@ func (a *root) statusRow(c *ui.Context, i int) bool {
 	row.ContextMenu(func(m *ui.Menu) {
 		if e.row.Group == gitx.Staged {
 			if m.Item("取消暂存").Chosen() {
-				a.changeIndex([]gitx.Row{e.row}, true)
+				a.changeIndex(a.actionRows(e.row), true)
 			}
 		} else {
 			if m.Item("暂存").Chosen() {
-				a.changeIndex([]gitx.Row{e.row}, false)
+				a.changeIndex(a.actionRows(e.row), false)
 			}
 		}
 		m.Separator()
 		if m.Item("复制路径").Chosen() {
 			mygo.Clipboard.WriteText(e.row.Path)
 		}
-		if e.row.Group == gitx.Untracked {
+		paths := untrackedPaths(a.actionRows(e.row))
+		if len(paths) > 0 {
 			m.Separator()
-			if m.Item("删除文件…").Danger().Chosen() {
-				a.deletePath = e.row.Path
+			label := "删除文件…"
+			if len(paths) > 1 {
+				label = fmt.Sprintf("删除 %d 个文件…", len(paths))
+			}
+			if m.Item(label).Danger().Chosen() {
+				a.deletePaths = paths
 				a.deleteAsk = true
 				c.Invalidate()
 			}
@@ -149,34 +154,54 @@ func (a *root) toggleRow(e listEntry) {
 	}
 }
 
-// deleteDialog asks before an untracked file is deleted: the file is gone
+// deleteDialog asks before untracked files are deleted: they are gone
 // from disk, not restored from git.
 func (a *root) deleteDialog(c *ui.Context) {
 	if !a.deleteAsk {
-		a.deletePath = ""
+		a.deletePaths = nil
 		return
 	}
-	msg := "将从磁盘删除未跟踪的文件：\n" + gitx.DisplayPath(a.deletePath) +
-		"\n\n此操作无法撤销。"
-	switch ui.AlertDialog(c, &a.deleteAsk, "删除文件？", msg, "取消", "删除") {
+	switch ui.AlertDialog(c, &a.deleteAsk, "删除文件？", deleteMessage(a.deletePaths), "取消", "删除") {
 	case 0, ui.AlertDismissed:
-		a.deletePath = ""
+		a.deletePaths = nil
 	case 1:
-		path := a.deletePath
-		a.deletePath = ""
-		a.deleteFile(path)
+		paths := a.deletePaths
+		a.deletePaths = nil
+		a.deleteFiles(paths)
 	}
 }
 
-func (a *root) deleteFile(path string) {
-	if a.busy || a.repo == nil || path == "" {
+// deleteMessage names the files to delete, capping a long list so the
+// alert stays readable.
+func deleteMessage(paths []string) string {
+	const shown = 10
+	var b strings.Builder
+	if len(paths) == 1 {
+		b.WriteString("将从磁盘删除未跟踪的文件：\n")
+	} else {
+		fmt.Fprintf(&b, "将从磁盘删除 %d 个未跟踪的文件：\n", len(paths))
+	}
+	for i, path := range paths {
+		if i == shown {
+			fmt.Fprintf(&b, "…等 %d 个文件\n", len(paths))
+			break
+		}
+		b.WriteString(gitx.DisplayPath(path))
+		b.WriteByte('\n')
+	}
+	b.WriteString("\n此操作无法撤销。")
+	return b.String()
+}
+
+func (a *root) deleteFiles(paths []string) {
+	if a.busy || a.repo == nil || len(paths) == 0 {
 		return
 	}
 	a.setBusy(true)
 	repo := a.repo
 	a.background(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := repo.RemoveFile(ctx, path)
+		err := repo.RemoveFiles(ctx, paths)
 		cancel()
 		a.update(func() {
 			a.setBusy(false)
