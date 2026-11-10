@@ -46,6 +46,9 @@ type root struct {
 	commitErr  string
 	note       string
 
+	deletePath string
+	deleteAsk  bool
+
 	summary  string
 	body     *editor.Buffer
 	bodyView editor.State
@@ -157,6 +160,7 @@ func (a *root) View(c *ui.Context) {
 		}).Fill()
 		a.footer(c)
 	})
+	a.deleteDialog(c)
 	a.shortcuts(c)
 	if a.cur != curBefore {
 		// 点击选中的新行在本帧才写入 cur，下一帧再同步 diff。
@@ -219,6 +223,8 @@ func (a *root) openRepo(dir string) {
 	a.resetDiff()
 	a.commitErr = ""
 	a.note = ""
+	a.deletePath = ""
+	a.deleteAsk = false
 	summary, body := splitMessage(repo.CommitMessage())
 	a.summary = summary
 	a.body.Reset(body)

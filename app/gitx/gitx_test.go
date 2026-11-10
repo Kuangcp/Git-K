@@ -138,6 +138,29 @@ func TestDiffEscapedPathIsLiteral(t *testing.T) {
 	}
 }
 
+// RemoveFile deletes an untracked file, while git clean leaves a path in
+// the index alone.
+func TestRemoveFileUntrackedOnly(t *testing.T) {
+	ctx := context.Background()
+	repo, dir := newRepo(t)
+	write(t, dir, "loose.txt", "hello\n")
+	if err := repo.RemoveFile(ctx, "loose.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "loose.txt")); !os.IsNotExist(err) {
+		t.Fatalf("untracked file still exists: %v", err)
+	}
+
+	write(t, dir, "tracked.txt", "keep\n")
+	git(t, dir, "add", "tracked.txt")
+	if err := repo.RemoveFile(ctx, "tracked.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "tracked.txt")); err != nil {
+		t.Fatalf("tracked file removed: %v", err)
+	}
+}
+
 func TestDraftRoundTrip(t *testing.T) {
 	repo, _ := newRepo(t)
 	if got := repo.CommitMessage(); got != "" {

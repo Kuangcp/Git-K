@@ -100,8 +100,15 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
   如要 dock，需要另做布局持久化、拖拽命中和浮动面板，工作量大，先不做。
 - 状态列表用 `ui.List` + `ListState.Header` 做粘性分组，`Selection` 多选，
   `Key` 用 `Row.Key`，`Label` 给读屏和首字母定位。不要为每个文件建真实控件。
+- 双击状态行切换暂存：已修改/未跟踪 → 暂存，已暂存 → 取消暂存；冲突行不响应。
+  双击用行元素的 `RowDoubleClicked`，动作在 `ui.List` 构建返回后执行，因为测试里
+  暂存会同步刷新 `entries`。
+- 未跟踪行右键有「删除文件…」，先用 `ui.AlertDialog` 二次确认，再走
+  `Repo.RemoveFile`（`git clean -q -f -- <path>`）。`git clean` 不会删已跟踪或已忽略
+  的路径，状态过期也不会误删；失败写 `note`。
 - 状态字母 `A/M/D/R/C/U/?` 用主题语义色（`Success/Warning/Danger/Accent/TextMuted`），
-  不要在组件里写死十六进制。
+  不要在组件里写死十六进制。已暂存的 `M` 和 `R` 用 `Success`，和暂存的新增一致；
+  工作区的 `M` 仍用 `Warning`，未暂存的重命名仍用 `Accent`。
 - 提交信息是两个输入框：单行 `TextInput`（`root.summary`，提交摘要）和
   `editor.View` + `editor.Buffer`（`root.body`，详细描述）。提交时由
   `root.message()` 拼成「摘要 + 空行 + 正文」；空正文时只有摘要。草稿 500ms 防抖

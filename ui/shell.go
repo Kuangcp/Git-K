@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -72,13 +74,22 @@ func (a *root) statusPane(c *ui.Context) {
 			return gitx.DisplayPath(e.row.Path)
 		}
 		a.list.Header = func(i int) bool { return a.entries[i].header }
+		var toggle listEntry
+		hasToggle := false
 		ui.List(c, &a.list, len(a.entries), func(i int) {
-			a.statusRow(c, i)
+			if a.statusRow(c, i) {
+				toggle, hasToggle = a.entries[i], true
+			}
 		}).Grow(1).Padding(0, 4)
+		// 双击在列表构建完后处理：暂存会同步刷新 entries，构建中改会越界。
+		if hasToggle && !a.busy {
+			a.toggleRow(toggle)
+		}
 	})
 }
 
-func (a *root) statusRow(c *ui.Context, i int) {
+// statusRow builds one status row and reports a double click on a file.
+func (a *root) statusRow(c *ui.Context, i int) bool {
 	t := c.Theme()
 	e := a.entries[i]
 	if e.header {
@@ -86,7 +97,7 @@ func (a *root) statusRow(c *ui.Context, i int) {
 			ui.Text(c, e.title).FontSize(11).Bold().TextColor(t.TextMuted)
 			ui.Text(c, fmt.Sprintf(" %d", e.count)).FontSize(11).TextColor(t.TextMuted).Grow(1)
 		})
-		return
+		return false
 	}
 	row := ui.Row(c).Height(28).PaddingX(12).Gap(8).AlignItems(ui.Center)
 	row.ContextMenu(func(m *ui.Menu) {
@@ -103,15 +114,80 @@ func (a *root) statusRow(c *ui.Context, i int) {
 		if m.Item("复制路径").Chosen() {
 			mygo.Clipboard.WriteText(e.row.Path)
 		}
+		if e.row.Group == gitx.Untracked {
+			m.Separator()
+			if m.Item("删除文件…").Danger().Chosen() {
+				a.deletePath = e.row.Path
+				a.deleteAsk = true
+				c.Invalidate()
+			}
+		}
 	})
 	row.Children(func() {
 		ui.Text(c, string(e.row.Code)).Width(16).FontSize(12).Bold().
-			TextColor(codeColor(t, e.row.Code))
+			TextColor(codeColor(t, e.row.Group, e.row.Code))
 		ui.Text(c, gitx.DisplayPath(e.row.Path)).FontSize(13).SingleLine().Grow(1)
 		if e.row.OldPath != "" {
 			ui.Text(c, "← "+gitx.DisplayPath(e.row.OldPath)).FontSize(11).
 				TextColor(t.TextMuted).SingleLine()
 		}
+	})
+	return row.RowDoubleClicked()
+}
+
+// toggleRow stages an unstaged row, or unstages a staged one. A file with
+// conflicts is left alone: staging it would mark the conflict resolved.
+func (a *root) toggleRow(e listEntry) {
+	if e.header {
+		return
+	}
+	switch e.row.Group {
+	case gitx.Modified, gitx.Untracked:
+		a.changeIndex([]gitx.Row{e.row}, false)
+	case gitx.Staged:
+		a.changeIndex([]gitx.Row{e.row}, true)
+	}
+}
+
+// deleteDialog asks before an untracked file is deleted: the file is gone
+// from disk, not restored from git.
+func (a *root) deleteDialog(c *ui.Context) {
+	if !a.deleteAsk {
+		a.deletePath = ""
+		return
+	}
+	msg := "将从磁盘删除未跟踪的文件：\n" + gitx.DisplayPath(a.deletePath) +
+		"\n\n此操作无法撤销。"
+	switch ui.AlertDialog(c, &a.deleteAsk, "删除文件？", msg, "取消", "删除") {
+	case 0, ui.AlertDismissed:
+		a.deletePath = ""
+	case 1:
+		path := a.deletePath
+		a.deletePath = ""
+		a.deleteFile(path)
+	}
+}
+
+func (a *root) deleteFile(path string) {
+	if a.busy || a.repo == nil || path == "" {
+		return
+	}
+	a.setBusy(true)
+	repo := a.repo
+	a.background(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := repo.RemoveFile(ctx, path)
+		cancel()
+		a.update(func() {
+			a.setBusy(false)
+			if err != nil {
+				a.note = "删除失败：" + err.Error()
+				return
+			}
+			a.note = ""
+			a.diffKey = ""
+			a.refreshStatus()
+		})
 	})
 }
 
@@ -211,7 +287,7 @@ func (a *root) footer(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · F5 刷新").
+		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新").
 			FontSize(11).TextColor(t.TextMuted).Grow(1)
 		if a.status.Upstream != "" {
 			ui.Text(c, a.status.Upstream).FontSize(11).TextColor(t.TextMuted).SingleLine()
@@ -248,7 +324,13 @@ func (a *root) paneTitle(c *ui.Context, title, meta string) {
 	})
 }
 
-func codeColor(t *ui.Theme, code byte) ui.Color {
+func codeColor(t *ui.Theme, group gitx.Group, code byte) ui.Color {
+	// A staged modification or rename is a change entering the index, so
+	// it reads green like a staged addition rather than the warning or
+	// accent of a working tree change.
+	if group == gitx.Staged && (code == 'M' || code == 'R') {
+		return t.Success
+	}
 	switch code {
 	case 'A':
 		return t.Success

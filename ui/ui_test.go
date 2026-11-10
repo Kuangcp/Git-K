@@ -154,6 +154,112 @@ func TestClickRowSelectsDiff(t *testing.T) {
 	}
 }
 
+// Double-clicking an unstaged file stages it, and double-clicking it in
+// the staged group unstages it.
+func TestDoubleClickTogglesStage(t *testing.T) {
+	dir := newRepo(t)
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+
+	double := func(code string) {
+		t.Helper()
+		rect, ok := tt.Find(code)
+		if !ok {
+			t.Fatalf("status code %q missing: %v", code, tt.Texts())
+		}
+		x, y := rect.X+rect.W/2, rect.Y+rect.H/2
+		tt.ClickAt(x, y)
+		tt.ClickAt(x, y)
+		tt.Frame()
+	}
+
+	double("?")
+	if got := r.status.Count(gitx.Staged); got != 1 {
+		t.Fatalf("after double click: staged=%d rows=%+v", got, r.status.Rows)
+	}
+	if !tt.HasText("已暂存") {
+		t.Fatalf("staged group missing: %v", tt.Texts())
+	}
+
+	double("A")
+	if got := r.status.Count(gitx.Staged); got != 0 {
+		t.Fatalf("after second double click: staged=%d rows=%+v", got, r.status.Rows)
+	}
+	if got := r.status.Count(gitx.Modified) + r.status.Count(gitx.Untracked); got != 1 {
+		t.Fatalf("file did not return unstaged: rows=%+v", r.status.Rows)
+	}
+}
+
+// A staged modification or rename reads green like a staged addition;
+// the same M in the working tree keeps the warning color.
+func TestStagedCodeColors(t *testing.T) {
+	th := ui.LightTheme()
+	if got := codeColor(th, gitx.Staged, 'M'); got != th.Success {
+		t.Fatalf("staged M color: %v, want success %v", got, th.Success)
+	}
+	if got := codeColor(th, gitx.Staged, 'R'); got != th.Success {
+		t.Fatalf("staged R color: %v, want success %v", got, th.Success)
+	}
+	if got := codeColor(th, gitx.Modified, 'M'); got != th.Warning {
+		t.Fatalf("modified M color: %v, want warning %v", got, th.Warning)
+	}
+	if got := codeColor(th, gitx.Staged, 'D'); got != th.Danger {
+		t.Fatalf("staged D color: %v, want danger %v", got, th.Danger)
+	}
+}
+
+// The context menu of an untracked file deletes it only after the alert
+// is answered, and canceling leaves the file alone.
+func TestDeleteUntrackedFileAsksFirst(t *testing.T) {
+	dir := newRepo(t)
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+
+	ask := func() {
+		t.Helper()
+		rect, ok := tt.Find("?")
+		if !ok {
+			t.Fatalf("untracked code missing: %v", tt.Texts())
+		}
+		tt.RightClickAt(rect.X+rect.W/2, rect.Y+rect.H/2)
+		if err := tt.ChooseMenuItem("删除文件…"); err != nil {
+			t.Fatalf("choose delete: %v", err)
+		}
+		tt.Frame()
+		if !tt.HasText("删除文件？") {
+			t.Fatalf("confirmation missing: %v", tt.Texts())
+		}
+	}
+
+	ask()
+	if err := tt.Click("取消"); err != nil {
+		t.Fatalf("click cancel: %v", err)
+	}
+	tt.Frame()
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatalf("cancel removed the file: %v", err)
+	}
+	if got := r.status.Total(); got != 1 {
+		t.Fatalf("after cancel: %d changes, want 1", got)
+	}
+
+	ask()
+	if err := tt.Click("删除"); err != nil {
+		t.Fatalf("click delete: %v", err)
+	}
+	tt.Frame()
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); !os.IsNotExist(err) {
+		t.Fatalf("file still exists after delete: %v", err)
+	}
+	if got := r.status.Total(); got != 0 {
+		t.Fatalf("after delete: %d changes, want 0", got)
+	}
+}
+
 func TestMessageComposition(t *testing.T) {
 	a := &root{summary: "feat: summary ", body: nil}
 	a.body = editor.NewBuffer("line one\nline two\n")
