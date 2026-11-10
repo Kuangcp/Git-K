@@ -40,6 +40,7 @@ assets/icon.svg      应用图标设计源：512 圆角底 + 紫→蓝 K
 assets/icon-{256,512}.png  由 tools/genicon 生成的位图
 tools/genicon/       与 SVG 同一几何的纯 Go 光栅化器
 app/gitx/            唯一的 git 边界：发现仓库、状态、diff、stage、commit、草稿
+app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入
   repo.go            运行器、环境变量、Repo 元数据
   status.go          porcelain v2 -z 解析与分组
   diff.go            三种 diff 命令与大小上限
@@ -63,6 +64,16 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
   没有当前行必须 `resetDiff()`，否则提交后会留下旧 diff（已有回归测试）。
 - 视图里不要保存 `ui.Element`；它会过期。持久状态放 `root`，用 `ui.ListState` /
   `editor.State` / `editor.DiffState` 保存控件自身状态。
+
+## 配置规则
+
+- `app/settings` 是唯一的配置读写边界：`Config` 新增字段即可扩展；`Open` 对缺失/
+  损坏/缺字段的文件回退默认值；`Update` 防抖 400ms 后原子写入
+  `$XDG_CONFIG_HOME/git-k/settings.json`（`os.UserConfigDir`），`Flush` 立即落盘。
+- 主程序在 `App.OnBeforeQuit` 和 `Run` 返回后都调用 `Flush`。
+- 窗口分隔条比例 `sidePercent` / `commitPercent` 在每次 `View` 末尾比较并保存；
+  加载时 0/100 视为无效配置，保存时钳到 1..99，避免下次启动隐藏面板。
+- 测试用 `settings.Open("")` 或临时文件，不要写用户真实配置。
 
 ## gitx 规则
 

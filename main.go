@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo"
 	mygoUI "github.com/egoist/mygo/ui"
 
+	"git-k/app/settings"
 	"git-k/ui"
 )
 
@@ -41,8 +42,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	store, err := settings.Open(settings.DefaultPath())
+	if err != nil {
+		log.Printf("读取设置失败，使用默认值: %v", err)
+		store, _ = settings.Open("")
+	}
+	saveSettings := func() {
+		if err := store.Flush(); err != nil {
+			log.Printf("保存设置失败: %v", err)
+		}
+	}
+	defer saveSettings()
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { saveSettings() })
+
 	mygo.App.WhenReady(func() {
-		r := ui.NewRoot(dir)
+		r := ui.NewRootWithSettings(dir, store)
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "git-k",
 			Width:     1280,

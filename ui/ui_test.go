@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"git-k/app/gitx"
+	"git-k/app/settings"
 )
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -431,6 +432,43 @@ func TestQuitShortcut(t *testing.T) {
 	tt.Key(ui.Ctrl, ui.KeyQ)
 	if !quit {
 		t.Fatal("Ctrl+Q did not quit")
+	}
+}
+
+// Split ratios load from settings, and a moved split is saved.
+func TestLayoutPersists(t *testing.T) {
+	dir := newRepo(t)
+	path := filepath.Join(t.TempDir(), "settings.json")
+	store, err := settings.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewRootWithSettings(dir, store)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+	if r.sidePercent != 48 || r.commitPercent != 44 {
+		t.Fatalf("default layout: %v / %v", r.sidePercent, r.commitPercent)
+	}
+
+	r.sidePercent = 61
+	r.commitPercent = 37
+	tt.Frame()
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := settings.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loaded.Config().Layout; got.SidePercent != 61 || got.CommitPercent != 37 {
+		t.Fatalf("saved layout: %+v", got)
+	}
+	r2 := NewRootWithSettings(dir, loaded)
+	defer r2.stopWatch()
+	if r2.sidePercent != 61 || r2.commitPercent != 37 {
+		t.Fatalf("loaded layout: %v / %v", r2.sidePercent, r2.commitPercent)
 	}
 }
 

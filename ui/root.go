@@ -14,6 +14,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"git-k/app/gitx"
+	"git-k/app/settings"
 )
 
 // listEntry is one row of the status list: a section header or a file.
@@ -73,6 +74,8 @@ type root struct {
 
 	sidePercent   float32
 	commitPercent float32
+	settings      *settings.Store
+	savedLayout   settings.Layout
 
 	statusGen uint64
 	diffGen   uint64
@@ -117,13 +120,25 @@ type fileStat struct {
 }
 
 // NewRoot opens the repository at dir, reads its status once, and returns
-// the window state. An empty dir means the current directory.
-func NewRoot(dir string) *root {
+// the window state. An empty dir means the current directory. It keeps no
+// settings, as tests want.
+func NewRoot(dir string) *root { return NewRootWithSettings(dir, nil) }
+
+// NewRootWithSettings is NewRoot with the layout percentages loaded from
+// st, whose updates it saves when a split moves.
+func NewRootWithSettings(dir string, st *settings.Store) *root {
 	a := &root{
 		sidePercent:   48,
 		commitPercent: 44,
 		cur:           -1,
 		quit:          mygo.App.Quit,
+		settings:      st,
+	}
+	if st != nil {
+		l := st.Config().Layout
+		a.sidePercent = layoutPercent(l.SidePercent, a.sidePercent)
+		a.commitPercent = layoutPercent(l.CommitPercent, a.commitPercent)
+		a.savedLayout = l
 	}
 	a.body = editor.NewBuffer("")
 	a.bodyView = editor.State{
@@ -201,6 +216,34 @@ func (a *root) View(c *ui.Context) {
 		// 点击选中的新行在本帧才写入 cur，下一帧再同步 diff。
 		c.Invalidate()
 	}
+	a.saveLayout()
+}
+
+// saveLayout stores the split ratios when they changed, such as while a
+// divider is dragged.
+func (a *root) saveLayout() {
+	if a.settings == nil {
+		return
+	}
+	l := settings.Layout{SidePercent: clampPercent(a.sidePercent), CommitPercent: clampPercent(a.commitPercent)}
+	if l == a.savedLayout {
+		return
+	}
+	a.savedLayout = l
+	a.settings.Update(func(c *settings.Config) { c.Layout = l })
+}
+
+func layoutPercent(v, def float32) float32 {
+	if v <= 0 || v >= 100 {
+		return def
+	}
+	return v
+}
+
+// clampPercent keeps a saved split a real proportion: 0 and 100 are how a
+// split's zero value reads, so they must not hide a pane on the next run.
+func clampPercent(v float32) float32 {
+	return min(max(v, 1), 99)
 }
 
 // update runs fn on the main thread, or at once in a test with no window.
