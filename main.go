@@ -28,7 +28,7 @@ func main() {
 	}
 	flag.Parse()
 	if *showVersion {
-		fmt.Println("git-k", version)
+		fmt.Println("Git-K", version)
 		return
 	}
 
@@ -58,7 +58,7 @@ func main() {
 	mygo.App.WhenReady(func() {
 		r := ui.NewRootLazy(dir, store)
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "git-k",
+			Title:     "Git-K",
 			Width:     1280,
 			Height:    820,
 			MinWidth:  760,

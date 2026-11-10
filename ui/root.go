@@ -286,7 +286,7 @@ func (a *root) updateTitle() {
 	if a.status.Detached {
 		branch = "detached"
 	}
-	a.win.SetTitle(fmt.Sprintf("%s — %s — git-k", a.repo.Name, branch))
+	a.win.SetTitle(fmt.Sprintf("%s — %s — Git-K", a.repo.Name, branch))
 }
 
 func (a *root) openRepo(dir string) {

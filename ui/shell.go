@@ -17,8 +17,7 @@ func (a *root) topBar(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(46).PaddingX(14).Gap(10).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, "git-k").FontSize(14).Bold()
-		ui.Text(c, a.repo.Name).FontSize(13).TextColor(t.TextMuted).SingleLine()
+		ui.Text(c, a.repo.Name).FontSize(15).Bold().TextColor(t.Accent).SingleLine()
 		ui.Text(c, a.repo.Root).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1)
 
 		branch := a.status.Branch
@@ -229,9 +228,8 @@ func (a *root) deleteFiles(paths []string) {
 func (a *root) commitPane(c *ui.Context) {
 	t := c.Theme()
 	staged := a.status.Count(gitx.Staged)
-	ui.Column(c).Fill().Children(func() {
-		a.paneTitle(c, "提交信息", fmt.Sprintf("已暂存 %d", staged))
-		ui.Column(c).Fill().Padding(12).Gap(8).Children(func() {
+	ui.Column(c).Fill().MinHeight(0).Children(func() {
+		ui.Column(c).Fill().MinHeight(0).Padding(12).Gap(4).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.TextInput(c, &a.summary).Fill().Height(30).Placeholder("提交摘要").
 					Label("提交摘要")
@@ -245,8 +243,8 @@ func (a *root) commitPane(c *ui.Context) {
 					a.doCommit()
 				}
 			})
-			ui.Column(c).Fill().BorderWidth(1).BorderColor(t.Border).Radius(8).Clip().Children(func() {
-				editor.View(c, &a.bodyView).Fill().Padding(8)
+			ui.Column(c).Fill().MinHeight(0).BorderWidth(1).BorderColor(t.Border).Radius(8).Clip().Children(func() {
+				editor.View(c, &a.bodyView).Fill().MinHeight(0).Padding(8)
 			})
 			if a.commitErr != "" {
 				ui.Text(c, a.commitErr).FontSize(12).TextColor(t.Danger).SingleLine().
@@ -264,7 +262,7 @@ func (a *root) commitPane(c *ui.Context) {
 
 func (a *root) diffPane(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().Children(func() {
+	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
@@ -375,7 +373,7 @@ func (a *root) footer(c *ui.Context) {
 func (a *root) noRepo(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Fill().Center().Gap(12).Padding(32).Children(func() {
-		ui.Text(c, "git-k").FontSize(28).Bold()
+		ui.Text(c, "Git-K").FontSize(28).Bold()
 		ui.Text(c, "原生 Git 客户端").FontSize(13).TextColor(t.TextMuted)
 		if a.openErr != "" {
 			ui.Text(c, a.openErr).FontSize(12).TextColor(t.Danger).SingleLine().Tooltip(a.openErr)

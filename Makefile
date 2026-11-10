@@ -19,7 +19,7 @@ SHA256 ?= $(shell if command -v sha256sum >/dev/null 2>&1; then echo sha256sum; 
 
 # 开发运行：始终关闭 cgo，mygo 的 native UI 不需要它。
 run:
-	CGO_ENABLED=0 $(GO) run -tags mygo_noinspector . -d test-repo
+	CGO_ENABLED=0 $(GO) run . -d test-repo
 
 # 静态二进制就是发布物；生产构建去掉 inspector。
 build:
