@@ -19,3 +19,4 @@ coverage.txt
 # 本地日志与临时文件
 *.log
 /tmp/
+test-repo/
