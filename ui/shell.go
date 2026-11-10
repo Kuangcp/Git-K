@@ -13,6 +13,8 @@ import (
 	"git-k/app/gitx"
 )
 
+var refreshIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/></svg>`))
+
 func (a *root) topBar(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(46).PaddingX(14).Gap(10).AlignItems(ui.Center).
@@ -57,7 +59,14 @@ func (a *root) topBar(c *ui.Context) {
 				a.chooseRepo()
 			}
 		}
-		if ui.Button(c, "刷新").Clicked() {
+		refresh := ui.ButtonBase(c).Width(28).Height(28).Label("刷新").Tooltip("刷新 (F5)")
+		refresh.Children(func() {
+			ui.Icon(c, refreshIcon).Width(16).Height(16)
+		})
+		if refresh.Hovered() {
+			refresh = refresh.Background(t.SurfaceHover).Radius(t.Radius)
+		}
+		if refresh.Clicked() {
 			a.refreshStatus()
 		}
 	})
@@ -230,10 +239,10 @@ func (a *root) deleteFiles(paths []string) {
 		a.update(func() {
 			a.setBusy(false)
 			if err != nil {
-				a.note = "删除失败：" + err.Error()
+				a.setNote("删除失败：" + err.Error())
 				return
 			}
-			a.note = ""
+			a.setNote("")
 			a.diffKey = ""
 			a.refreshStatus()
 		})
@@ -246,14 +255,17 @@ func (a *root) commitPane(c *ui.Context) {
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		ui.Column(c).Fill().MinHeight(0).Padding(12).Gap(4).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.TextInput(c, &a.summary).Fill().Height(30).Placeholder("提交摘要").
+				ui.TextInput(c, &a.summary).Fill().Height(34).Placeholder("提交摘要").
 					Label("提交摘要")
 				label := "提交"
+				if a.amendMode {
+					label = "修正提交"
+				}
 				if a.commitBusy {
 					label = "提交中…"
 				}
 				can := !a.commitBusy && strings.TrimSpace(a.summary) != "" &&
-					(staged > 0 || a.amend)
+					(staged > 0 || a.amendMode)
 				if ui.PrimaryButton(c, label).Disabled(!can).Clicked() {
 					a.doCommit()
 				}
@@ -268,7 +280,16 @@ func (a *root) commitPane(c *ui.Context) {
 				ui.Text(c, a.note).FontSize(12).TextColor(t.Success).SingleLine().Tooltip(a.note)
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Checkbox(c, &a.amend, "修正上次")
+				if a.amendMode {
+					ui.Text(c, "正在修正上次提交").FontSize(11).TextColor(t.Warning)
+					if ui.Button(c, "取消修正").Height(22).PaddingX(8).Clicked() {
+						a.amendMode = false
+						a.setNote("")
+						c.Invalidate()
+					}
+				} else {
+					ui.Text(c, "Ctrl+M 修正上次").FontSize(11).TextColor(t.TextMuted)
+				}
 				ui.Text(c, "Ctrl+↵ 提交").FontSize(11).TextColor(t.TextMuted).Grow(1)
 			})
 		})
@@ -377,7 +398,7 @@ func (a *root) footer(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新 · Ctrl+Q 退出").
+		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新 · Ctrl+P 推送 · Ctrl+Q 退出").
 			FontSize(11).TextColor(t.TextMuted).Grow(1)
 		if a.status.Upstream != "" {
 			ui.Text(c, a.status.Upstream).FontSize(11).TextColor(t.TextMuted).SingleLine()

@@ -48,7 +48,7 @@ main.go              mygo 应用、窗口、命令行参数、嵌入窗口图标
 assets/icon.svg      应用图标设计源：512 圆角底 + 紫→蓝 K
 assets/icon-{256,512}.png  由 tools/genicon 生成的位图
 tools/genicon/       与 SVG 同一几何的纯 Go 光栅化器
-app/gitx/            唯一的 git 边界：发现仓库、状态、diff、stage、commit、草稿
+app/gitx/            唯一的 git 边界：发现仓库、状态、diff、stage、commit、push、草稿
 app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入
   repo.go            运行器、环境变量、Repo 元数据
   status.go          porcelain v2 -z 解析与分组
@@ -133,6 +133,10 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
   `git rm -r --cached --ignore-unmatch`。
 - 提交用 `git commit -F -`，消息走 stdin；不要拼 shell 字符串，不要写临时消息文件。
   提交钩子可能很久，超时给 10 分钟，期间 UI 显示忙碌态。
+- 推送用 `git push`（`Repo.Push`），不拼 shell；失败信息写回 `note`，超时 5 分钟。
+- 修正提交不再用勾选框：`Ctrl+M` 调 `Repo.LoadAmend` 读取 HEAD 的 message 并把 index
+  reset 到 HEAD（工作区不动），UI 进入 `amendMode`；用户改完提交时才走
+  `git commit --amend`。
 
 ## UI 规则
 
@@ -167,9 +171,11 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
   `root.message()` 拼成「摘要 + 空行 + 正文」；空正文时只有摘要。草稿 500ms 防抖
   写入 `.git/GIT_K_MSG`，读回时由 `splitMessage()` 拆成两个框，提交成功后清空。
 - 快捷键对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、`Ctrl+U` 取消暂存、
-  `Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交。用 `Context.Shortcut`，不要全局 hook。
+  `Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+M` 加载上次提交进入修正模式、
+  `Ctrl+P` 推送。用 `Context.Shortcut`，不要全局 hook。
 - 错误必须可见：状态错误在列表里，diff 错误在 diff 面板，提交失败在提交面板；
-  不要把错误吞掉或只写日志。
+  不要把错误吞掉或只写日志。`root.setNote` 的提示（提交成功、操作失败等）显示 3 秒
+  后自动消失；新的提示会刷新计时。
 - 中文是界面语言；代码标识符和注释用英文，说明性注释可以中文。避免无意义文案。
 
 ## 测试与验收

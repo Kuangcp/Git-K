@@ -164,6 +164,65 @@ func TestRemoveFilesUntrackedOnly(t *testing.T) {
 	}
 }
 
+// LoadAmend returns the last commit's message and resets the index to
+// HEAD, leaving the working tree's changes in place.
+// Push sends the current branch upstream.
+func TestPush(t *testing.T) {
+	ctx := context.Background()
+	repo, dir := newRepo(t)
+	write(t, dir, "a.txt", "hello\n")
+	if err := repo.Stage(ctx, []string{"a.txt"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Commit(ctx, "first", false); err != nil {
+		t.Fatal(err)
+	}
+	bare := t.TempDir()
+	git(t, bare, "init", "--bare", "-q")
+	git(t, dir, "remote", "add", "origin", bare)
+	git(t, dir, "push", "-q", "-u", "origin", "main")
+
+	write(t, dir, "a.txt", "second\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "second")
+	if _, err := repo.Push(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := git(t, bare, "log", "-1", "--format=%s", "main"); strings.TrimSpace(got) != "second" {
+		t.Fatalf("pushed commit: %q", got)
+	}
+}
+
+func TestLoadAmend(t *testing.T) {
+	ctx := context.Background()
+	repo, dir := newRepo(t)
+	write(t, dir, "a.txt", "hello\n")
+	if err := repo.Stage(ctx, []string{"a.txt"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Commit(ctx, "first\n\nbody\n", false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "b.txt", "second\n")
+	if err := repo.Stage(ctx, []string{"b.txt"}, false); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := repo.LoadAmend(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg != "first\n\nbody" {
+		t.Fatalf("message: %q", msg)
+	}
+	st, err := repo.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Count(Staged) != 0 || st.Count(Untracked) != 1 {
+		t.Fatalf("index not reset: %+v", st.Rows)
+	}
+}
+
 func TestDraftRoundTrip(t *testing.T) {
 	repo, _ := newRepo(t)
 	if got := repo.CommitMessage(); got != "" {

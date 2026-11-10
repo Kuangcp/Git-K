@@ -7,6 +7,22 @@ import (
 	"strings"
 )
 
+// LoadAmend returns the last commit's message and resets the index to
+// HEAD, leaving the working tree alone: amending then starts from the
+// last commit's tree plus what the user stages.
+func (r *Repo) LoadAmend(ctx context.Context) (string, error) {
+	res := r.run(ctx, nil, "log", "-1", "--format=%B", "HEAD")
+	if err := res.Err2(); err != nil {
+		return "", err
+	}
+	msg := strings.TrimRight(string(res.Stdout), "\n")
+	res = r.run(ctx, nil, "reset", "-q", "--mixed", "HEAD")
+	if err := res.Err2(); err != nil {
+		return "", err
+	}
+	return msg, nil
+}
+
 // Commit creates a commit from the index with msg. amend rewrites the
 // last commit. It returns git's output, which names the new commit.
 func (r *Repo) Commit(ctx context.Context, msg string, amend bool) (string, error) {

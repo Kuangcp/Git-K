@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -484,6 +485,92 @@ func TestLazyRoot(t *testing.T) {
 	r.refreshStatus()
 	if !r.loaded || len(r.entries) == 0 {
 		t.Fatalf("refresh did not load: loaded=%v entries=%d", r.loaded, len(r.entries))
+	}
+}
+
+// Ctrl+M loads the last commit's message and index, and the next commit
+// amends it.
+func TestAmendShortcut(t *testing.T) {
+	dir := newRepo(t)
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "first\n\nbody")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", "a.txt") // reset by Ctrl+M
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+
+	tt.Key(ui.Ctrl, ui.KeyM)
+	tt.Frame()
+	if !r.amendMode || r.summary != "first" || r.body.String() != "body" {
+		t.Fatalf("amend load: mode=%v summary=%q body=%q", r.amendMode, r.summary, r.body.String())
+	}
+	if r.status.HasStaged() {
+		t.Fatalf("index not reset: %+v", r.status.Rows)
+	}
+
+	r.summary = "first edited"
+	r.doCommit()
+	tt.Frame()
+	if r.commitErr != "" {
+		t.Fatalf("amend commit: %s", r.commitErr)
+	}
+	if got := git(t, dir, "rev-list", "--count", "HEAD"); strings.TrimSpace(got) != "1" {
+		t.Fatalf("commit count: %q", got)
+	}
+	if got := git(t, dir, "log", "-1", "--format=%B"); !strings.HasPrefix(got, "first edited") {
+		t.Fatalf("amended message: %q", got)
+	}
+}
+
+// Ctrl+P pushes the current branch.
+func TestPushShortcut(t *testing.T) {
+	dir := newRepo(t)
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "first")
+	bare := t.TempDir()
+	git(t, bare, "init", "--bare", "-q")
+	git(t, dir, "remote", "add", "origin", bare)
+	git(t, dir, "push", "-q", "-u", "origin", "main")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("second\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "second")
+
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+	tt.Key(ui.Ctrl, ui.KeyP)
+	tt.Frame()
+	if got := git(t, bare, "log", "-1", "--format=%s", "main"); strings.TrimSpace(got) != "second" {
+		t.Fatalf("pushed commit: %q (note %q)", got, r.note)
+	}
+}
+
+// Status notes disappear after their lifetime.
+func TestNoteExpires(t *testing.T) {
+	old := noteLifetime
+	noteLifetime = 10 * time.Millisecond
+	defer func() { noteLifetime = old }()
+	dir := newRepo(t)
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+	r.setNote("提交成功")
+	tt.Frame()
+	if r.note == "" {
+		t.Fatal("note did not show")
+	}
+	time.Sleep(30 * time.Millisecond)
+	tt.Frame()
+	if r.note != "" {
+		t.Fatalf("note did not expire: %q", r.note)
 	}
 }
 

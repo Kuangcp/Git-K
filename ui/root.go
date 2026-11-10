@@ -54,16 +54,17 @@ type root struct {
 	commitBusy bool
 	commitErr  string
 	note       string
+	noteUntil  time.Time
 
 	deletePaths []string
 	deleteAsk   bool
 
-	summary  string
-	body     *editor.Buffer
-	bodyView editor.State
-	amend    bool
-	draftSeq atomic.Uint64
-	draftTxt string
+	summary   string
+	body      *editor.Buffer
+	bodyView  editor.State
+	amendMode bool
+	draftSeq  atomic.Uint64
+	draftTxt  string
 
 	diff        editor.DiffState
 	diffKey     string
@@ -197,6 +198,7 @@ func (a *root) Attach(win *mygo.Window) {
 
 // View builds one frame.
 func (a *root) View(c *ui.Context) {
+	a.expireNote()
 	a.maybeSaveDraft()
 	if a.repo == nil {
 		a.noRepo(c)
@@ -340,6 +342,7 @@ func (a *root) openRepo(dir string) {
 	a.resetDiff()
 	a.commitErr = ""
 	a.note = ""
+	a.amendMode = false
 	a.groupDiffs = nil
 	a.groupFiles = nil
 	a.groupStat.Reset("")
@@ -984,10 +987,10 @@ func (a *root) changeIndex(rows []gitx.Row, forceUnstage bool) {
 
 func (a *root) afterIndexChange(err error) {
 	if err != nil {
-		a.note = "操作失败：" + err.Error()
+		a.setNote("操作失败：" + err.Error())
 		return
 	}
-	a.note = ""
+	a.setNote("")
 	a.diffKey = ""
 	a.refreshStatus()
 }
@@ -999,6 +1002,54 @@ func (a *root) setBusy(busy bool) {
 	}
 }
 
+var noteLifetime = 3 * time.Second
+
+// setNote shows a short status message and schedules its removal.
+func (a *root) setNote(note string) {
+	a.note = note
+	a.noteUntil = time.Now().Add(noteLifetime)
+	if note == "" || a.win == nil {
+		return
+	}
+	win := a.win
+	time.AfterFunc(noteLifetime, func() {
+		win.Update(func() { a.expireNote() })
+	})
+}
+
+func (a *root) expireNote() {
+	if a.note != "" && !time.Now().Before(a.noteUntil) {
+		a.note = ""
+	}
+}
+
+// push sends the current branch to its upstream.
+func (a *root) push() {
+	if a.busy || a.commitBusy || a.repo == nil {
+		return
+	}
+	a.setBusy(true)
+	repo := a.repo
+	a.background(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		out, err := repo.Push(ctx)
+		cancel()
+		a.update(func() {
+			a.setBusy(false)
+			if err != nil {
+				a.setNote("推送失败：" + err.Error())
+				return
+			}
+			note := "推送成功"
+			if out != "" {
+				note = "推送成功：" + strings.Split(out, "\n")[0]
+			}
+			a.setNote(note)
+			a.refreshStatus()
+		})
+	})
+}
+
 func (a *root) doCommit() {
 	if a.commitBusy || a.repo == nil {
 		return
@@ -1008,14 +1059,14 @@ func (a *root) doCommit() {
 		a.commitErr = "请填写提交摘要"
 		return
 	}
-	if !a.status.HasStaged() && !a.amend {
+	if !a.status.HasStaged() && !a.amendMode {
 		a.commitErr = "没有已暂存的改动"
 		return
 	}
 	a.commitBusy = true
 	a.commitErr = ""
 	repo := a.repo
-	amend := a.amend
+	amend := a.amendMode
 	a.background(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		out, err := repo.Commit(ctx, msg, amend)
@@ -1027,10 +1078,11 @@ func (a *root) doCommit() {
 				return
 			}
 			a.commitErr = ""
-			a.note = "提交成功"
+			note := "提交成功"
+			a.setNote(note)
 			for _, line := range strings.Split(out, "\n") {
 				if strings.HasPrefix(line, "[") {
-					a.note = "已提交 " + line
+					a.setNote("已提交 " + line)
 					break
 				}
 			}
@@ -1039,7 +1091,38 @@ func (a *root) doCommit() {
 			a.summary = ""
 			a.body.Reset("")
 			a.draftTxt = ""
-			a.amend = false
+			a.amendMode = false
+			a.diffKey = ""
+			a.refreshStatus()
+		})
+	})
+}
+
+// loadAmend loads the last commit's message and resets the index to its
+// tree, so editing and committing amends that commit.
+func (a *root) loadAmend() {
+	if a.busy || a.commitBusy || a.repo == nil {
+		return
+	}
+	a.setBusy(true)
+	repo := a.repo
+	a.background(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		msg, err := repo.LoadAmend(ctx)
+		cancel()
+		a.update(func() {
+			a.setBusy(false)
+			if err != nil {
+				a.setNote("加载上次提交失败：" + err.Error())
+				return
+			}
+			summary, body := splitMessage(msg)
+			a.summary = summary
+			a.body.Reset(body)
+			a.amendMode = true
+			a.commitErr = ""
+			a.setNote("已加载上次提交，提交时会修正它")
+			a.draftTxt = ""
 			a.diffKey = ""
 			a.refreshStatus()
 		})
@@ -1055,7 +1138,7 @@ func (a *root) maybeSaveDraft() {
 		return
 	}
 	a.commitErr = ""
-	a.note = ""
+	a.setNote("")
 	a.draftTxt = s
 	if a.win == nil {
 		return
@@ -1196,6 +1279,14 @@ func (a *root) shortcuts(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Ctrl, ui.KeyR) || c.Shortcut(0, ui.KeyF5) {
 		a.refreshStatus()
+	}
+	if c.Shortcut(ui.Ctrl, ui.KeyM) {
+		a.loadAmend()
+		return
+	}
+	if c.Shortcut(ui.Ctrl, ui.KeyP) {
+		a.push()
+		return
 	}
 	if c.Shortcut(ui.Ctrl, ui.KeyEnter) {
 		a.doCommit()
