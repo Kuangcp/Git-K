@@ -37,6 +37,8 @@ type root struct {
 	onTitle  func()
 	openTab  func(string)
 	pickRepo func()
+	loadOpen *bool
+	loadMenu func(*ui.Context, ui.Element)
 	closed   bool
 
 	status    gitx.Status

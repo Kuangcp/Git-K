@@ -28,6 +28,7 @@ type App struct {
 	openErr  string
 	toast    string
 	icon     ui.ImageSource
+	loadOpen bool
 	// pending holds launch directories that arrived before the window.
 	pending []pendingOpen
 }
@@ -171,6 +172,8 @@ func (a *App) open(dir string) error {
 	r.onTitle = a.syncTitle
 	r.openTab = a.OpenAndFocus
 	r.pickRepo = a.chooseRepo
+	r.loadOpen = &a.loadOpen
+	r.loadMenu = a.loadPopover
 	r.quit = mygo.App.Quit
 	a.tabs = append(a.tabs, &Tab{key: key, root: r})
 	a.openErr = ""
@@ -233,6 +236,7 @@ func (a *App) activate(i int) {
 	if i < 0 || i >= len(a.tabs) {
 		return
 	}
+	a.loadOpen = false
 	a.active = i
 	r := a.tabs[i].root
 	r.loadLayout()
@@ -316,6 +320,58 @@ func (a *App) tabBar(c *ui.Context) {
 	}
 }
 
+// loadPopover lists historical repositories not open in a tab.
+func (a *App) loadPopover(c *ui.Context, anchor ui.Element) {
+	t := c.Theme()
+	ui.Popover(c, anchor, &a.loadOpen, func() {
+		ui.Column(c).Width(300).Gap(4).Padding(8).Children(func() {
+			closed := a.closedRecent()
+			if len(closed) == 0 {
+				ui.Text(c, "没有其他历史仓库").FontSize(12).TextColor(t.TextMuted).Padding(4, 6)
+			}
+			for _, path := range closed {
+				if ui.Button(c, filepath.Base(path)).FillWidth().Height(30).
+					Justify(ui.Start).TextAlign(ui.Start).SingleLine().
+					Tooltip(path).Clicked() {
+					a.loadOpen = false
+					a.OpenAndFocus(path)
+				}
+			}
+		})
+	})
+}
+
+// closedRecent lists history repositories that are not open.
+func (a *App) closedRecent() []string {
+	open := make(map[string]bool, len(a.tabs))
+	for _, tab := range a.tabs {
+		open[tab.key] = true
+	}
+	var out []string
+	for _, path := range a.recent() {
+		if !open[canonicalKey(path)] {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// removeRecent forgets a repository in the home page's history.
+func (a *App) removeRecent(path string) {
+	if a.settings == nil {
+		return
+	}
+	a.settings.Update(func(c *settings.Config) {
+		out := make([]string, 0, len(c.Recent))
+		for _, old := range c.Recent {
+			if old != path {
+				out = append(out, old)
+			}
+		}
+		c.Recent = out
+	})
+}
+
 func (a *App) empty(c *ui.Context) {
 	t := c.Theme()
 	recent := a.recent()
@@ -341,6 +397,12 @@ func (a *App) empty(c *ui.Context) {
 					Justify(ui.Start).AlignItems(ui.Center).
 					BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Radius(0).
 					Tooltip(path)
+				item.ContextMenu(func(m *ui.Menu) {
+					if m.Item("删除记录").Chosen() {
+						a.removeRecent(path)
+						c.Invalidate()
+					}
+				})
 				item.Children(func() {
 					ui.Column(c).Grow(1).Gap(0).Children(func() {
 						ui.Text(c, filepath.Base(path)).FontSize(16).Bold().SingleLine()

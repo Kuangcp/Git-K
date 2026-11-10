@@ -177,6 +177,68 @@ func TestHomeRecentClick(t *testing.T) {
 	}
 }
 
+// The load popover lists history repositories that are not open.
+func TestLoadRepoPopover(t *testing.T) {
+	dir1 := newRepo(t)
+	dir2 := newRepo(t)
+	store, err := settings.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(store)
+	if err := app.open(dir1); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.open(dir2); err != nil {
+		t.Fatal(err)
+	}
+	app.closeAt(1) // keep dir1 open, dir2 closed
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	if err := tt.Click("加载仓库"); err != nil {
+		t.Fatalf("click load: %v", err)
+	}
+	tt.Frame()
+	if !tt.HasText(filepath.Base(dir2)) {
+		t.Fatalf("load popover missing closed repo: %v", tt.Texts())
+	}
+	if err := tt.Click(filepath.Base(dir2)); err != nil {
+		t.Fatalf("click closed repo: %v", err)
+	}
+	tt.Frame()
+	if len(app.pending) != 1 || app.pending[0].dir != dir2 {
+		t.Fatalf("load did not open: tabs=%d pending=%+v", len(app.tabs), app.pending)
+	}
+}
+
+// The home page removes a history entry from its context menu.
+func TestHomeDeleteRecent(t *testing.T) {
+	dir := newRepo(t)
+	store, err := settings.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Update(func(c *settings.Config) { c.Recent = []string{dir} })
+	app := NewApp(store)
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	rect, ok := tt.Find(dir)
+	if !ok {
+		t.Fatalf("recent path missing: %v", tt.Texts())
+	}
+	tt.RightClickAt(rect.X+rect.W/2, rect.Y+rect.H/2)
+	if err := tt.ChooseMenuItem("删除记录"); err != nil {
+		t.Fatalf("choose delete: %v", err)
+	}
+	tt.Frame()
+	if got := store.Config().Recent; len(got) != 0 {
+		t.Fatalf("recent not removed: %v", got)
+	}
+	if tt.HasText(dir) {
+		t.Fatalf("home still shows deleted recent: %v", tt.Texts())
+	}
+}
+
 // Ctrl+W closes the active tab.
 func TestAppCloseShortcut(t *testing.T) {
 	dir1 := newRepo(t)

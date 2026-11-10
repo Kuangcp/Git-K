@@ -42,6 +42,14 @@ func (a *root) topBar(c *ui.Context) {
 		if ui.Button(c, "全部取消").Disabled(a.busy || !a.status.HasStaged()).Clicked() {
 			a.unstageAll()
 		}
+		load := ui.Button(c, "加载仓库")
+		if load.Clicked() && a.loadOpen != nil {
+			*a.loadOpen = !*a.loadOpen
+			c.Invalidate()
+		}
+		if a.loadMenu != nil {
+			a.loadMenu(c, load)
+		}
 		if ui.Button(c, "打开仓库…").Clicked() {
 			if a.pickRepo != nil {
 				a.pickRepo()
