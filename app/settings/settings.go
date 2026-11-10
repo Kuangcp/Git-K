@@ -18,8 +18,18 @@ const Version = 1
 
 // Config is the app's persisted configuration.
 type Config struct {
-	Version int    `json:"version"`
-	Layout  Layout `json:"layout"`
+	Version int      `json:"version"`
+	Layout  Layout   `json:"layout"`
+	Window  Window   `json:"window"`
+	Recent  []string `json:"recent,omitempty"`
+}
+
+// Window is the main window's last position and size, in DIPs.
+type Window struct {
+	X, Y, Width, Height int
+	// Positioned says X and Y were saved, so a centered window is not
+	// mistaken for one at the screen's origin.
+	Positioned bool `json:"positioned,omitempty"`
 }
 
 // Layout holds the window's split ratios, as percentages.
@@ -37,6 +47,7 @@ func Default() Config {
 			SidePercent:   48,
 			CommitPercent: 44,
 		},
+		Window: Window{Width: 1280, Height: 820},
 	}
 }
 
@@ -171,6 +182,12 @@ func withDefaults(cfg Config) Config {
 	}
 	if cfg.Layout.CommitPercent <= 0 || cfg.Layout.CommitPercent >= 100 {
 		cfg.Layout.CommitPercent = d.Layout.CommitPercent
+	}
+	if cfg.Window.Width <= 0 {
+		cfg.Window.Width = d.Window.Width
+	}
+	if cfg.Window.Height <= 0 {
+		cfg.Window.Height = d.Window.Height
 	}
 	return cfg
 }

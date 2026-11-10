@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 
 	"github.com/egoist/mygo"
@@ -26,8 +27,14 @@ type App struct {
 	settings *settings.Store
 	openErr  string
 	toast    string
+	icon     ui.ImageSource
 	// pending holds launch directories that arrived before the window.
-	pending []string
+	pending []pendingOpen
+}
+
+type pendingOpen struct {
+	dir   string
+	quiet bool
 }
 
 // NewApp creates an app with no tabs.
@@ -35,10 +42,30 @@ func NewApp(st *settings.Store) *App {
 	return &App{settings: st, active: -1}
 }
 
+// SetIconPNG gives the home page the app's icon.
+func (a *App) SetIconPNG(data []byte) {
+	if src, err := ui.DecodeImage(data); err == nil {
+		a.icon = src
+	}
+}
+
+// OpenInitial opens the first launch's directory, leaving the home page
+// without an error when it is not a repository.
+func (a *App) OpenInitial(dir string) {
+	if a.win == nil {
+		a.pending = append(a.pending, pendingOpen{dir: dir, quiet: true})
+		return
+	}
+	a.OpenFocus(dir)
+}
+
 // Attach gives the app its window and opens any launches that arrived
 // before it was ready.
 func (a *App) Attach(win *mygo.Window) {
 	a.win = win
+	win.OnResize(a.saveBounds)
+	win.OnMove(a.saveBounds)
+	a.saveBounds()
 	for _, t := range a.tabs {
 		if t.root.win == nil {
 			t.root.Attach(win)
@@ -49,9 +76,26 @@ func (a *App) Attach(win *mygo.Window) {
 	}
 	pending := a.pending
 	a.pending = nil
-	for _, dir := range pending {
-		a.OpenAndFocus(dir)
+	for _, p := range pending {
+		if p.quiet {
+			a.OpenFocus(p.dir)
+		} else {
+			a.OpenAndFocus(p.dir)
+		}
 	}
+}
+
+// saveBounds remembers where the window is and how big it is.
+func (a *App) saveBounds() {
+	if a.win == nil || a.settings == nil {
+		return
+	}
+	b := a.win.Bounds()
+	a.settings.Update(func(c *settings.Config) {
+		c.Window = settings.Window{
+			X: b.X, Y: b.Y, Width: b.Width, Height: b.Height, Positioned: true,
+		}
+	})
 }
 
 // View builds the tab bar and the active repository.
@@ -77,7 +121,7 @@ func (a *App) View(c *ui.Context) {
 // already open selects its existing tab.
 func (a *App) OpenAndFocus(dir string) {
 	if a.win == nil {
-		a.pending = append(a.pending, dir)
+		a.pending = append(a.pending, pendingOpen{dir: dir})
 		return
 	}
 	if err := a.open(dir); err != nil {
@@ -86,6 +130,21 @@ func (a *App) OpenAndFocus(dir string) {
 	} else {
 		a.openErr = ""
 		a.toast = ""
+	}
+	a.win.Show()
+	a.win.Focus()
+}
+
+// OpenFocus opens dir when it is a repository, and otherwise just shows
+// the window: a desktop launch from a home directory opens the home page
+// without an error.
+func (a *App) OpenFocus(dir string) {
+	if a.win == nil {
+		a.pending = append(a.pending, pendingOpen{dir: dir, quiet: true})
+		return
+	}
+	if err := a.open(dir); err != nil {
+		a.openErr, a.toast = "", ""
 	}
 	a.win.Show()
 	a.win.Focus()
@@ -106,6 +165,7 @@ func (a *App) open(dir string) error {
 	if i := a.find(key); i >= 0 {
 		r.close()
 		a.activate(i)
+		a.touchRecent(key)
 		return nil
 	}
 	r.onTitle = a.syncTitle
@@ -114,8 +174,41 @@ func (a *App) open(dir string) error {
 	r.quit = mygo.App.Quit
 	a.tabs = append(a.tabs, &Tab{key: key, root: r})
 	a.openErr = ""
+	a.touchRecent(key)
 	a.activate(len(a.tabs) - 1)
 	return nil
+}
+
+const recentLimit = 20
+
+// touchRecent puts path first among the recent repositories.
+func (a *App) touchRecent(path string) {
+	if a.settings == nil || path == "" {
+		return
+	}
+	a.settings.Update(func(c *settings.Config) {
+		recent := []string{path}
+		for _, old := range c.Recent {
+			if old != path && len(recent) < recentLimit {
+				recent = append(recent, old)
+			}
+		}
+		c.Recent = recent
+	})
+}
+
+// recent lists repositories that still exist, newest first.
+func (a *App) recent() []string {
+	if a.settings == nil {
+		return nil
+	}
+	var out []string
+	for _, path := range a.settings.Config().Recent {
+		if _, err := os.Stat(path); err == nil {
+			out = append(out, path)
+		}
+	}
+	return out
 }
 
 func canonicalKey(path string) string {
@@ -225,15 +318,44 @@ func (a *App) tabBar(c *ui.Context) {
 
 func (a *App) empty(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().Center().Gap(12).Padding(32).Children(func() {
-		ui.Text(c, "Git-K").FontSize(28).Bold()
-		ui.Text(c, "把一个 Git 仓库作为标签打开").FontSize(13).TextColor(t.TextMuted)
-		if a.openErr != "" {
-			ui.Text(c, a.openErr).FontSize(12).TextColor(t.Danger).SingleLine().Tooltip(a.openErr)
+	recent := a.recent()
+	ui.Column(c).Fill().AlignItems(ui.Center).Padding(56, 24, 24, 24).Gap(18).Children(func() {
+		if a.icon != nil {
+			ui.Image(c, a.icon).Width(88).Height(88)
+		} else {
+			ui.Text(c, "Git-K").FontSize(32).Bold()
 		}
-		if ui.PrimaryButton(c, "打开仓库…").Clicked() {
-			a.chooseRepo()
-		}
+		ui.Text(c, "Git-K").FontSize(20).Bold()
+		ui.Column(c).Width(520).Gap(2).Children(func() {
+			ui.Row(c).Width(520).Height(30).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "最近打开").FontSize(12).Bold().TextColor(t.TextMuted).Grow(1)
+				if ui.Button(c, "打开其他仓库…").Height(28).PaddingX(10).Clicked() {
+					a.chooseRepo()
+				}
+			})
+			if len(recent) == 0 {
+				ui.Text(c, "还没有最近打开的仓库").FontSize(13).TextColor(t.TextMuted).Padding(8, 0)
+			}
+			for _, path := range recent {
+				item := ui.ButtonBase(c).FillWidth().Height(48).Padding(4, 12).
+					Justify(ui.Start).AlignItems(ui.Center).
+					BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Radius(0).
+					Tooltip(path)
+				item.Children(func() {
+					ui.Column(c).Grow(1).Gap(0).Children(func() {
+						ui.Text(c, filepath.Base(path)).FontSize(16).Bold().SingleLine()
+						ui.Text(c, path).FontSize(11).TextColor(t.TextMuted).
+							PaddingStart(22).SingleLine()
+					})
+				})
+				if item.Hovered() {
+					item = item.Background(t.SurfaceHover)
+				}
+				if item.Clicked() {
+					a.OpenAndFocus(path)
+				}
+			}
+		})
 	})
 }
 

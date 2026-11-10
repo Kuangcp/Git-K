@@ -5,6 +5,10 @@ import (
 	"image/png"
 	"os"
 	"testing"
+
+	"github.com/egoist/mygo"
+
+	"git-k/app/settings"
 )
 
 // TestAppIconPixels 验证图标真的画出来了：浅色圆角底 + 紫→蓝渐变的 K。
@@ -35,6 +39,26 @@ func TestParseArgs(t *testing.T) {
 		}
 		if got.dir != c.wantDir || got.version != c.wantVer {
 			t.Fatalf("%s: %+v, want dir=%q version=%v", c.name, got, c.wantDir, c.wantVer)
+		}
+	}
+}
+
+func TestWindowPosition(t *testing.T) {
+	displays := []mygo.Display{{WorkArea: mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1080}}}
+	for _, c := range []struct {
+		name string
+		w    settings.Window
+		x, y int
+		ok   bool
+	}{
+		{"unpositioned", settings.Window{Width: 800, Height: 600}, 0, 0, false},
+		{"onscreen", settings.Window{X: 100, Y: 80, Width: 800, Height: 600, Positioned: true}, 100, 80, true},
+		{"partly visible", settings.Window{X: -50, Y: -20, Width: 800, Height: 600, Positioned: true}, -50, -20, true},
+		{"offscreen", settings.Window{X: 3000, Y: 2000, Width: 800, Height: 600, Positioned: true}, 0, 0, false},
+	} {
+		x, y, ok := windowPosition(c.w, displays)
+		if x != c.x || y != c.y || ok != c.ok {
+			t.Fatalf("%s: got %d,%d,%v; want %d,%d,%v", c.name, x, y, ok, c.x, c.y, c.ok)
 		}
 	}
 }

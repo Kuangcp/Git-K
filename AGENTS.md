@@ -73,6 +73,10 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 - 单实例：`main` 先 `RequestSingleInstanceLock`，后启动的进程把 args + cwd 转给
   第一个进程后退出；`OnSecondInstance` 解析参数、按仓库根去重 tab、切换并
   `win.Show/Focus`。转发路径相对第二个进程的 cwd 解析。
+- 首页（无 tab）显示应用图标和最近打开仓库；`settings.Config.Recent` 保存规范化仓库
+  根，`App.touchRecent` 去重后放最前，最多 20 个；点击直接作为 tab 打开。
+- 窗口位置/大小存 `settings.Config.Window`；`App.Attach` 注册 OnMove/OnResize 保存，
+  `main` 启动时用 `windowPosition` 校验仍有部分在屏幕内才恢复，否则居中。
 - tab：`App.open` 用 `NewRootLazy` 打开仓库，`canonicalKey` 解析 symlink 后比较；
   同仓库直接激活已有 tab。顶栏「打开仓库…」走同一个入口。关闭 tab 调
   `root.close`，异步结果经 `closed` 丢弃。打开失败用 `Context.Toast` 提示，不弹确认框。

@@ -61,25 +61,38 @@ func main() {
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { saveSettings() })
 
 	app := ui.NewApp(store)
+	app.SetIconPNG(appIconPNG)
 	mygo.App.OnSecondInstance(func(args []string, wd string) {
 		next, err := parseArgs(args, wd)
 		if err != nil {
 			log.Printf("忽略启动参数: %v", err)
-			app.OpenAndFocus(wd)
+			app.OpenFocus(wd)
 			return
 		}
-		app.OpenAndFocus(next.dir)
+		app.OpenFocus(next.dir)
 	})
 
 	mygo.App.WhenReady(func() {
-		win := mygo.NewWindow(mygo.WindowOptions{
+		cfg := store.Config()
+		width, height := cfg.Window.Width, cfg.Window.Height
+		if width < 760 {
+			width = 760
+		}
+		if height < 520 {
+			height = 520
+		}
+		wo := mygo.WindowOptions{
 			Title:     "Git-K",
-			Width:     1280,
-			Height:    820,
+			Width:     width,
+			Height:    height,
 			MinWidth:  760,
 			MinHeight: 520,
 			Content:   mygoUI.View(app.View),
-		})
+		}
+		if x, y, ok := windowPosition(cfg.Window, mygo.Screen.Displays()); ok {
+			wo.X, wo.Y = x, y
+		}
+		win := mygo.NewWindow(wo)
 		if err := win.SetIcon(appIconPNG); err != nil {
 			log.Printf("设置窗口图标失败: %v", err)
 		}
@@ -87,7 +100,7 @@ func main() {
 			_ = mygo.App.Dock.SetIcon(appIconPNG)
 		}
 		app.Attach(win)
-		app.OpenAndFocus(opts.dir)
+		app.OpenInitial(opts.dir)
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
@@ -122,6 +135,32 @@ func parseArgs(args []string, wd string) (options, error) {
 		dir = filepath.Join(wd, dir)
 	}
 	return options{dir: dir, version: *showVersion}, nil
+}
+
+// windowPosition restores a saved position when enough of the window is
+// on a display; otherwise the window is centered.
+func windowPosition(w settings.Window, displays []mygo.Display) (int, int, bool) {
+	if !w.Positioned {
+		return 0, 0, false
+	}
+	width, height := w.Width, w.Height
+	if width <= 0 {
+		width = 1280
+	}
+	if height <= 0 {
+		height = 820
+	}
+	for _, d := range displays {
+		wa := d.WorkArea
+		left := max(w.X, wa.X)
+		right := min(w.X+width, wa.X+wa.Width)
+		top := max(w.Y, wa.Y)
+		bottom := min(w.Y+height, wa.Y+wa.Height)
+		if right-left >= 80 && bottom-top >= 40 {
+			return w.X, w.Y, true
+		}
+	}
+	return 0, 0, false
 }
 
 func printUsage() {

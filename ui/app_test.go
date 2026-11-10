@@ -79,6 +79,124 @@ func TestAppTabClick(t *testing.T) {
 }
 
 // A layout moved in one tab is what the next tab takes.
+// Opening repositories records them newest first and moves a reopened
+// repository back to the front.
+func TestAppRecent(t *testing.T) {
+	dir1 := newRepo(t)
+	dir2 := newRepo(t)
+	store, err := settings.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(store)
+	if err := app.open(dir1); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.open(dir2); err != nil {
+		t.Fatal(err)
+	}
+	recent := app.recent()
+	if len(recent) != 2 || recent[0] != dir2 || recent[1] != dir1 {
+		t.Fatalf("recent: %v, want [%s %s]", recent, dir2, dir1)
+	}
+	if err := app.open(dir1); err != nil {
+		t.Fatal(err)
+	}
+	recent = app.recent()
+	if len(recent) != 2 || recent[0] != dir1 || recent[1] != dir2 {
+		t.Fatalf("reopened recent: %v", recent)
+	}
+}
+
+// The home page lists recent repositories with the empty state.
+func TestHomeView(t *testing.T) {
+	dir := newRepo(t)
+	store, err := settings.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Update(func(c *settings.Config) { c.Recent = []string{dir} })
+	app := NewApp(store)
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	if !tt.HasText("最近打开") || !tt.HasText(filepath.Base(dir)) || !tt.HasText(dir) {
+		t.Fatalf("home missing recent: %v", tt.Texts())
+	}
+	if !tt.HasText("打开其他仓库…") {
+		t.Fatalf("home missing open button: %v", tt.Texts())
+	}
+}
+
+// The home page takes the app icon without failing to build.
+func TestHomeIcon(t *testing.T) {
+	data, err := os.ReadFile("../assets/icon-256.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(nil)
+	app.SetIconPNG(data)
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	if !tt.HasText("最近打开") || !tt.HasText("打开其他仓库…") {
+		t.Fatalf("home missing: %v", tt.Texts())
+	}
+}
+
+// An initial launch outside a repository queues a quiet open, and the
+// home page never shows the failed path as an error.
+func TestOpenInitialQuiet(t *testing.T) {
+	app := NewApp(nil)
+	app.OpenInitial(t.TempDir())
+	if len(app.pending) != 1 || !app.pending[0].quiet {
+		t.Fatalf("pending: %+v", app.pending)
+	}
+	app.openErr = "/home/zk 不是 Git 仓库"
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	if tt.HasText("不是 Git 仓库") {
+		t.Fatalf("home shows the open error: %v", tt.Texts())
+	}
+}
+
+// A recent item is one clickable two-line block.
+func TestHomeRecentClick(t *testing.T) {
+	dir := newRepo(t)
+	store, err := settings.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Update(func(c *settings.Config) { c.Recent = []string{dir} })
+	app := NewApp(store)
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	if err := tt.Click(dir); err != nil {
+		t.Fatalf("click recent: %v", err)
+	}
+	if len(app.pending) != 1 || app.pending[0].dir != dir {
+		t.Fatalf("recent click did not open: %+v", app.pending)
+	}
+}
+
+// Ctrl+W closes the active tab.
+func TestAppCloseShortcut(t *testing.T) {
+	dir1 := newRepo(t)
+	dir2 := newRepo(t)
+	app := NewApp(nil)
+	if err := app.open(dir1); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.open(dir2); err != nil {
+		t.Fatal(err)
+	}
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	tt.Key(ui.Ctrl, ui.KeyW)
+	tt.Frame()
+	if len(app.tabs) != 1 || app.active != 0 {
+		t.Fatalf("Ctrl+W: %d tabs, active %d", len(app.tabs), app.active)
+	}
+}
+
 // The close half of a tab closes it.
 func TestAppCloseButton(t *testing.T) {
 	dir1 := newRepo(t)

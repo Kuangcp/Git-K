@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -12,12 +13,14 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Config(); got != Default() {
+	if got := s.Config(); !reflect.DeepEqual(got, Default()) {
 		t.Fatalf("defaults: %+v, want %+v", got, Default())
 	}
 	s.Update(func(c *Config) {
 		c.Layout.SidePercent = 61
 		c.Layout.CommitPercent = 37
+		c.Recent = []string{"/work/b", "/work/a"}
+		c.Window = Window{X: 120, Y: 80, Width: 1000, Height: 700, Positioned: true}
 	})
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
@@ -30,6 +33,12 @@ func TestRoundTrip(t *testing.T) {
 	got := loaded.Config()
 	if got.Layout.SidePercent != 61 || got.Layout.CommitPercent != 37 {
 		t.Fatalf("loaded layout: %+v", got.Layout)
+	}
+	if !reflect.DeepEqual(got.Recent, []string{"/work/b", "/work/a"}) {
+		t.Fatalf("loaded recent: %v", got.Recent)
+	}
+	if got.Window != (Window{X: 120, Y: 80, Width: 1000, Height: 700, Positioned: true}) {
+		t.Fatalf("loaded window: %+v", got.Window)
 	}
 	if got.Version != Version {
 		t.Fatalf("version: %d, want %d", got.Version, Version)
@@ -62,7 +71,7 @@ func TestDefaultsFallback(t *testing.T) {
 			}
 			continue
 		}
-		if got != Default() {
+		if !reflect.DeepEqual(got, Default()) {
 			t.Fatalf("%s: %+v, want defaults", name, got)
 		}
 	}
