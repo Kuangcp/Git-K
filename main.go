@@ -56,7 +56,7 @@ func main() {
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { saveSettings() })
 
 	mygo.App.WhenReady(func() {
-		r := ui.NewRootWithSettings(dir, store)
+		r := ui.NewRootLazy(dir, store)
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "git-k",
 			Width:     1280,

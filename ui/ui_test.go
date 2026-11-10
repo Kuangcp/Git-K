@@ -472,6 +472,21 @@ func TestLayoutPersists(t *testing.T) {
 	}
 }
 
+// The lazy constructor leaves the first status read to the caller, so
+// the window can show first.
+func TestLazyRoot(t *testing.T) {
+	dir := newRepo(t)
+	r := NewRootLazy(dir, nil)
+	defer r.stopWatch()
+	if r.loaded || len(r.entries) != 0 {
+		t.Fatalf("lazy root loaded before refresh: loaded=%v entries=%d", r.loaded, len(r.entries))
+	}
+	r.refreshStatus()
+	if !r.loaded || len(r.entries) == 0 {
+		t.Fatalf("refresh did not load: loaded=%v entries=%d", r.loaded, len(r.entries))
+	}
+}
+
 func TestMessageComposition(t *testing.T) {
 	a := &root{summary: "feat: summary ", body: nil}
 	a.body = editor.NewBuffer("line one\nline two\n")

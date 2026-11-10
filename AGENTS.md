@@ -21,16 +21,23 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
 ## 常用命令
 
 ```sh
-make run      # CGO_ENABLED=0 go run . [仓库路径]
+make run      # CGO_ENABLED=0 go run -tags mygo_noinspector . -d test-repo
               # 也可 go run . -d <目录>：打开该目录所在的仓库，便于用 test-repo 调试
 make test     # CGO_ENABLED=0 go test ./...
 make vet      # CGO_ENABLED=0 go vet ./...
 make build    # 静态发布二进制 ./git-k（-trimpath -tags mygo_noinspector -s -w）
+make release  # 交叉编译 6 个平台到 dist/，tar.gz/zip + SHA256SUMS
 make fmt      # go fmt ./...
 make icon     # go run ./tools/genicon，重生成 assets/icon-{256,512}.png
 ```
 
 发布构建不要带 inspector：`mygo_noinspector` 同时会关掉自动化插件。
+
+`make release` 默认构建 linux/darwin/windows 的 amd64+arm64，产物名为
+`git-k_<version>_<goos>_<goarch>.{tar.gz,zip}`，附带 LICENSE/Readme；可用
+`RELEASE_PLATFORMS` 覆盖（逗号或空格分隔），例如
+`make release RELEASE_PLATFORMS=linux/amd64,darwin/arm64`。版本来自
+`git describe --tags --always --dirty`。
 
 ## 目录
 
@@ -55,9 +62,14 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
 ## 数据流与线程
 
 - 视图是状态的纯函数：`root.View(c)` 只读 `root` 的字段、发请求，不阻塞。
+- 启动顺序：`NewRootLazy` 只打开仓库，窗口先显示；`Attach` 后异步读第一次
+  status。文件监听在第一次 status 回来后才启动，避免和窗口抢 CPU。测试用
+  `NewRoot`（同步）保持确定性。
 - git 查询/修改在 goroutine 里跑；结果只能通过 `root.update`（有窗口时是
   `Window.Update`，测试里同步执行）回主线程改状态。
 - 每个异步请求带 `gen`：`statusGen`、`diffGen`。回调先比 gen，旧结果直接丢弃。
+- 切换 diff 时先重置 `root.diff` / `root.raw` 再装载新 patch，避免旧文件的大缓冲
+  叠加；离开汇总时清掉 `groupFiles` / `groupStat`。
 - 测试（`win == nil`）时 `update` / `background` 同步执行，保证 `ui.Tester` 可预测；
   不要为了测试另写一套路径。
 - `syncDiff` 每帧在列表构建后运行：当前行或 `Status.DiffKey` 变了才重新取 patch。

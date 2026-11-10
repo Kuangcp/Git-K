@@ -76,6 +76,7 @@ type root struct {
 	commitPercent float32
 	settings      *settings.Store
 	savedLayout   settings.Layout
+	deferStatus   bool
 
 	statusGen uint64
 	diffGen   uint64
@@ -122,11 +123,21 @@ type fileStat struct {
 // NewRoot opens the repository at dir, reads its status once, and returns
 // the window state. An empty dir means the current directory. It keeps no
 // settings, as tests want.
-func NewRoot(dir string) *root { return NewRootWithSettings(dir, nil) }
+func NewRoot(dir string) *root { return newRoot(dir, nil, false) }
 
 // NewRootWithSettings is NewRoot with the layout percentages loaded from
 // st, whose updates it saves when a split moves.
 func NewRootWithSettings(dir string, st *settings.Store) *root {
+	return newRoot(dir, st, false)
+}
+
+// NewRootLazy opens the repository but leaves the first status read to
+// Attach, so the window shows before git runs.
+func NewRootLazy(dir string, st *settings.Store) *root {
+	return newRoot(dir, st, true)
+}
+
+func newRoot(dir string, st *settings.Store, lazy bool) *root {
 	a := &root{
 		sidePercent:   48,
 		commitPercent: 44,
@@ -170,6 +181,7 @@ func NewRootWithSettings(dir string, st *settings.Store) *root {
 	}
 	a.list.Selected = &a.cur
 	a.list.Selection = &a.chosen
+	a.deferStatus = lazy
 	a.openRepo(dir)
 	return a
 }
@@ -180,7 +192,6 @@ func (a *root) Attach(win *mygo.Window) {
 	a.win = win
 	a.updateTitle()
 	a.refreshStatus()
-	a.startWatch()
 }
 
 // View builds one frame.
@@ -302,6 +313,8 @@ func (a *root) openRepo(dir string) {
 	a.commitErr = ""
 	a.note = ""
 	a.groupDiffs = nil
+	a.groupFiles = nil
+	a.groupStat.Reset("")
 	a.groupPrevCur = -1
 	a.deletePaths = nil
 	a.deleteAsk = false
@@ -309,7 +322,9 @@ func (a *root) openRepo(dir string) {
 	a.summary = summary
 	a.body.Reset(body)
 	a.draftTxt = a.message()
-	a.refreshStatus()
+	if !a.deferStatus {
+		a.refreshStatus()
+	}
 	a.updateTitle()
 	if a.win != nil {
 		a.startWatch()
@@ -353,6 +368,9 @@ func (a *root) applyStatus(gen uint64, st gitx.Status, err error) {
 		return
 	}
 	a.loaded = true
+	// Watch once the first status is in, so enrolling the tree does not
+	// compete with showing the window.
+	a.startWatch()
 	if err != nil {
 		a.statusErr = "读取状态失败：" + err.Error()
 		return
@@ -663,6 +681,9 @@ func (a *root) applyGroupDiff(gen uint64, key string, files []groupFileDiff, sta
 	a.diffLoading = false
 	a.diffPath = ""
 	a.diffAdded, a.diffDeleted = added, deleted
+	// The group pane does not show these; release a single file's buffers.
+	a.raw.Reset("")
+	a.diff = editor.DiffState{Layout: editor.DiffUnified, KeepScrollbars: true}
 	a.groupFiles = files
 	a.groupStat.Reset(stat)
 	if len(files) == 0 {
@@ -678,6 +699,10 @@ func (a *root) applyDiff(gen uint64, key, patch, path string, err error) {
 	}
 	a.diffLoading = false
 	a.diffPath = path
+	// Release the buffers of the view being replaced before taking the new
+	// patch, so switching files does not stack the two.
+	a.raw.Reset("")
+	a.diff = editor.DiffState{Layout: editor.DiffUnified, KeepScrollbars: true}
 	if err != nil {
 		a.diffMode = diffError
 		a.diffErr = err.Error()
@@ -769,7 +794,7 @@ func (a *root) groupActive() (gitx.Group, bool) {
 // again when its chip is clicked a second time.
 func (a *root) selectGroup(g gitx.Group) {
 	if active, ok := a.groupActive(); ok && active == g {
-		a.groupDiffs = nil
+		a.clearGroup()
 		if a.groupPrevCur >= 0 && a.groupPrevCur < len(a.entries) {
 			a.cur = a.groupPrevCur
 		}
@@ -794,10 +819,14 @@ func (a *root) selectGroup(g gitx.Group) {
 
 // clearGroup leaves the group's aggregated diff for a file row.
 func (a *root) clearGroup() {
-	if len(a.groupDiffs) == 0 {
+	if len(a.groupDiffs) == 0 && (a.groupStat == nil || a.groupStat.LineCount() == 0) {
 		return
 	}
 	a.groupDiffs = nil
+	a.groupFiles = nil
+	if a.groupStat != nil {
+		a.groupStat.Reset("")
+	}
 	a.diffKey = ""
 }
 
