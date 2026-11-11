@@ -44,24 +44,70 @@ make icon     # go run ./tools/genicon，重生成 assets/icon-{256,512}.png
 ## 目录
 
 ```
-main.go              mygo 应用、窗口、命令行参数、嵌入窗口图标
-assets/icon.svg      应用图标设计源：512 圆角底 + 紫→蓝 K
-assets/icon-{256,512}.png  由 tools/genicon 生成的位图
+main.go              CLI、单实例、窗口生命周期、settings 注入
+assets/              图标设计源与生成位图
 tools/genicon/       与 SVG 同一几何的纯 Go 光栅化器
-app/gitx/            唯一的 git 边界：发现仓库、状态、diff、stage、commit、push、草稿
-app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入
-  repo.go            运行器、环境变量、Repo 元数据
+app/gitx/            唯一的 git 边界
+  repo.go            运行器、固定环境、Repo 元数据、Windows 控制台隐藏
   status.go          porcelain v2 -z 解析与分组
   diff.go            三种 diff 命令与大小上限
   stage.go           add / restore --staged / unborn 的 rm --cached
-  commit.go          commit -F -、amend、GIT_K_MSG 草稿
-ui/                  窗口状态与视图
-  app.go             单窗口多 tab：去重、切换、关闭、标题、单实例请求
-  root.go            单个 tab 的状态、刷新、异步、watch、快捷键、git 动作
-  shell.go           顶栏、状态列表、提交面板、diff 面板、空态
-ui/app_test.go       tab 去重/切换/共享布局测试
-ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
+  commit.go          commit -F -、LoadAmend、GIT_K_MSG 草稿
+  push.go/pull.go    push / pull
+  remove.go          untracked 文件删除
+app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入
+ui/                  窗口与 tab
+  app.go             单窗口多 tab：去重、切换、关闭、标题、窗口 bounds
+  tabs_view.go       tab 条视图
+  home.go            首页、最近记录、加载历史仓库弹窗、选择目录
+  root.go            单个 tab 的根状态、构造、View、布局、openRepo、异步桥
+  status.go          status 刷新/应用、列表项构建、当前行
+  diff.go            单文件/分组 diff 的加载、解析、统计
+  changes.go         选中行、暂存/取消暂存、删除、索引操作
+  commit.go          提交、修正提交、草稿、message 拆分
+  remote.go          pull / push
+  watch.go           工作树与 .git 监听
+  feedback.go        busy、3 秒自动消失的 note
+  commands.go        快捷键、选择目录
+  shell.go           顶栏、图标按钮、底栏、空态、通用视图 helpers
+  status_view.go     状态面板与右键/删除确认
+  commit_view.go     提交面板
+  diff_view.go       差异面板与分组汇总
+ui/app_test.go       tab、首页、最近记录、单实例参数相关测试
+ui/ui_test.go        无窗口视图 + 临时仓库端到端测试
 ```
+
+
+## 架构
+
+分层与依赖方向：
+
+```
+main.go ──> ui.App / ui.root ──> app/gitx
+                    │
+                    └──────────> app/settings
+```
+
+- `main.go` 只做进程级工作：参数、单实例锁、唯一窗口、settings store、恢复窗口位置。
+- `ui.App` 是窗口级状态：tab 列表、活动 tab、首页、最近记录、加载仓库弹窗、标题。
+- `ui.root` 是单个仓库 tab 的控制器：repo、status、diff、编辑器状态、watcher、异步请求。
+- `ui/*_view.go` 与 `shell.go` 是视图函数，只读状态、发请求；不直接跑 git，不阻塞。
+- `app/gitx` 不知道 UI，也不依赖 `app/settings`；所有 git 命令、路径、错误都在这里收口。
+- `app/settings` 不知道仓库和 UI 语义，只负责 JSON 的默认值、更新和原子写入。
+
+约束：
+
+- **状态归属**：跨 tab 的只放 `App`；仓库相关只放各自的 `root`。不要把仓库状态塞回
+  `App`，也不要在多个 root 间共享可变指针（布局比例通过 settings 同步）。
+- **异步**：git 只在 goroutine 跑，结果经 `root.update` 回主线程；所有请求带
+  `statusGen` / `diffGen`，旧结果直接丢弃。关闭 tab 后 `closed` 丢弃所有回调。
+- **视图**：每帧重新构建，不缓存 `ui.Element`。持久控件状态放 `root` 的
+  `ui.ListState` / `editor.State` / `editor.DiffState`。
+- **文件边界**：新增功能按职责落到对应文件；单个文件接近 400 行或出现第二种职责时拆分，
+  不要继续堆回 `root.go`。
+- **性能**：启动先出窗口再读 status；文件监听等第一次 status 回来后再开；分组 diff
+  最多 4 个并发 git 进程；首页最近记录缓存路径检查，避免每帧 stat；切换 diff 时释放
+  旧 buffer；Windows 子进程必须 `hideConsole`。
 
 ## 数据流与线程
 
