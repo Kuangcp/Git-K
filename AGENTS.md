@@ -158,6 +158,9 @@ main.go ──> ui.App / ui.root ──> app/gitx
 - 所有命令在 `Repo.Root` 下执行，路径参数前加 `--`。
 - Windows 上所有 git 子进程走 `hideConsole`（`CREATE_NO_WINDOW` + `HideWindow`），
   否则每次 status/diff 都会闪一个黑色控制台窗口，并增加进程启动开销。
+- MSYS2/Cygwin 下的 `/d/Code/...`、`/cygdrive/d/Code/...` 路径在 `gitx.Open` 里经
+  `nativePath` 转成 `D:\Code\...` 后再 `filepath.Abs`；`git rev-parse` 的输出也走同一
+  转换，避免 Windows 上 `chdir D:\d\...` 找不到目录。
 - 环境固定：`GIT_OPTIONAL_LOCKS=0`、`GIT_TERMINAL_PROMPT=0`、
   `GIT_LITERAL_PATHSPECS=1`、`LC_ALL=C`。因此文件名里的 `*`、`:(...)` 不会被当成
   pathspec。

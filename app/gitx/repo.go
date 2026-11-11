@@ -37,7 +37,7 @@ func Open(dir string) (*Repo, error) {
 		}
 		dir = wd
 	}
-	abs, err := filepath.Abs(dir)
+	abs, err := filepath.Abs(nativePath(dir))
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +52,11 @@ func Open(dir string) (*Repo, error) {
 	if lines[2] == "true" {
 		return nil, errors.New("暂不支持裸仓库")
 	}
-	root, err := filepath.Abs(lines[0])
+	root, err := filepath.Abs(nativePath(lines[0]))
 	if err != nil {
 		return nil, err
 	}
-	gitDir, err := filepath.Abs(lines[1])
+	gitDir, err := filepath.Abs(nativePath(lines[1]))
 	if err != nil {
 		return nil, err
 	}
