@@ -48,6 +48,22 @@ func write(t *testing.T, dir, name, body string) {
 	}
 }
 
+// Open from a nested directory finds the repository's top level.
+func TestOpenFromSubdir(t *testing.T) {
+	repo, dir := newRepo(t)
+	sub := filepath.Join(dir, "one", "two", "three")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Open(sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.Root != repo.Root || opened.Name != repo.Name {
+		t.Fatalf("opened %q (%s), want %q (%s)", opened.Root, opened.Name, repo.Root, repo.Name)
+	}
+}
+
 func TestStatusStageDiffCommit(t *testing.T) {
 	ctx := context.Background()
 	repo, dir := newRepo(t)

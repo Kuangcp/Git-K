@@ -153,6 +153,8 @@ func (a *App) OpenFocus(dir string) {
 }
 
 func (a *App) open(dir string) error {
+	// gitx.Open runs rev-parse --show-toplevel, so a launch from any depth
+	// creates the tab of the repository root and dedupes against it.
 	r := NewRootLazy(dir, a.settings)
 	if r.repo == nil {
 		err := r.openErr

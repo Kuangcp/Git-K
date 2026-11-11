@@ -56,6 +56,29 @@ func TestAppTabs(t *testing.T) {
 	}
 }
 
+// Opening from a nested directory uses the repository's root tab, and
+// dedupes against opening that root directly.
+func TestOpenFromSubdir(t *testing.T) {
+	root := newRepo(t)
+	sub := filepath.Join(root, "one", "two", "three")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(nil)
+	if err := app.open(sub); err != nil {
+		t.Fatal(err)
+	}
+	if len(app.tabs) != 1 || app.tabs[0].key != canonicalKey(root) {
+		t.Fatalf("subdir tab key: %q, want %q", app.tabs[0].key, canonicalKey(root))
+	}
+	if err := app.open(root); err != nil {
+		t.Fatal(err)
+	}
+	if len(app.tabs) != 1 {
+		t.Fatalf("root opened a second tab: %d", len(app.tabs))
+	}
+}
+
 // Clicking a tab focuses it.
 func TestAppTabClick(t *testing.T) {
 	dir1 := newRepo(t)
