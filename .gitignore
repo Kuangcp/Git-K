@@ -3,6 +3,9 @@
 /dist/
 /build/
 
+git-k
+git-k.exe
+
 # Go
 *.test
 *.out
