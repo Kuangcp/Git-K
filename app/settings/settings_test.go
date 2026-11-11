@@ -21,6 +21,7 @@ func TestRoundTrip(t *testing.T) {
 		c.Layout.CommitPercent = 37
 		c.Recent = []string{"/work/b", "/work/a"}
 		c.Window = Window{X: 120, Y: 80, Width: 1000, Height: 700, Positioned: true}
+		c.Theme = Theme{Mode: ThemeDark, Scheme: SchemeForest}
 	})
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
@@ -40,12 +41,24 @@ func TestRoundTrip(t *testing.T) {
 	if got.Window != (Window{X: 120, Y: 80, Width: 1000, Height: 700, Positioned: true}) {
 		t.Fatalf("loaded window: %+v", got.Window)
 	}
+	if got.Theme != (Theme{Mode: ThemeDark, Scheme: SchemeForest}) {
+		t.Fatalf("loaded theme: %+v", got.Theme)
+	}
 	if got.Version != Version {
 		t.Fatalf("version: %d, want %d", got.Version, Version)
 	}
 }
 
 // A missing, malformed, or partial file still gives usable settings.
+func TestThemeDefaults(t *testing.T) {
+	if got := (Theme{Mode: "nope", Scheme: "nope"}).Normalize(); got != DefaultTheme() {
+		t.Fatalf("normalized theme: %+v", got)
+	}
+	if got := (Theme{Mode: ThemeDark, Scheme: SchemeOcean}).Normalize(); got.Mode != ThemeDark || got.Scheme != SchemeOcean {
+		t.Fatalf("valid theme changed: %+v", got)
+	}
+}
+
 func TestDefaultsFallback(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{

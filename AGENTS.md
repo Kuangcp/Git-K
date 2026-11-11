@@ -8,6 +8,9 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
 - **无 cgo**：所有构建都设 `CGO_ENABLED=0`。不要 `import "C"`，不要引入需要 cgo 的依赖。
 - **无 WebView**：窗口内容是 `mygo.NewWindow(WindowOptions{Content: ui.View(...)})`，
   不加载 HTML/JS。不要给 `mygo.json` 打开 webview。
+- **无边框窗口**：主窗口 `Frameless: true`，由 `ui/titlebar.go` 自绘 32px 标题栏：
+  `DragWindow` 拖动/双击最大化，右侧是设置、最小化、最大化/还原、关闭。不要再依赖
+  系统标题栏；home 与仓库页共用同一条标题栏。
 - **Go 1.27.3 / mygo v0.8.3**：`go.mod` 固定 mygo 版本，和 `db-g` 一致。升级前先跑
   `go test ./...` 和一次真实窗口冒烟。
 - **单窗口、多标签**：一个进程一个窗口，每个 tab 绑定一个工作树；同一仓库只能有一个
@@ -61,9 +64,12 @@ app/gitx/            唯一的 git 边界
   commit.go          commit -F -、LoadAmend、GIT_K_MSG 草稿
   push.go/pull.go    push / pull
   remove.go          untracked 文件删除
-app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入
+app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入；Theme 预设
 ui/                  窗口与 tab
   app.go             单窗口多 tab：去重、切换、关闭、标题、窗口 bounds
+  titlebar.go        无边框窗口标题栏、拖动区、窗口控制
+  theme.go           Lobe 主题预设解析与无边框窗口底色
+  settings_view.go   设置弹窗（主题模式/配色方案）
   tabs_view.go       tab 条视图
   home.go            首页、最近记录、加载历史仓库弹窗、选择目录
   root.go            单个 tab 的根状态、构造、View、布局、openRepo、异步桥
@@ -79,6 +85,7 @@ ui/                  窗口与 tab
   status_view.go     状态面板与右键/删除确认
   commit_view.go     提交面板
   diff_view.go       差异面板与分组汇总
+ui/lobe/             vendored Lobe UI 主题 token（MIT）
 ui/app_test.go       tab、首页、最近记录、单实例参数相关测试
 ui/ui_test.go        无窗口视图 + 临时仓库端到端测试
 ```
@@ -107,6 +114,9 @@ main.go ──> ui.App / ui.root ──> app/gitx
   `App`，也不要在多个 root 间共享可变指针（布局比例通过 settings 同步）。
 - **异步**：git 只在 goroutine 跑，结果经 `root.update` 回主线程；所有请求带
   `statusGen` / `diffGen`，旧结果直接丢弃。关闭 tab 后 `closed` 丢弃所有回调。
+- **主题**：`App.applyTheme` 在帧首把 `settings.Theme`（system/light/dark ×
+  default/ocean/forest/warm）解析成 vendored Lobe token，覆盖中性色后 `c.SetTheme`。
+  设置弹窗修改后写回 `settings.Store` 并更新无边框窗口底色；不要再散落硬编码颜色。
 - **视图**：每帧重新构建，不缓存 `ui.Element`。持久控件状态放 `root` 的
   `ui.ListState` / `editor.State` / `editor.DiffState`。
 - **文件边界**：新增功能按职责落到对应文件；单个文件接近 400 行或出现第二种职责时拆分，
@@ -130,6 +140,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
   右键「删除记录」只删历史，不动仓库。
 - 有 tab 时顶栏「加载仓库」用 `ui.Popover` 列出最近记录中当前未打开的仓库；点击即
   作为 tab 打开。`App.closedRecent` 过滤已打开仓库。
+- 外观预设存 `settings.Config.Theme`：`Mode` 为 system/light/dark，`Scheme` 为
+  default/ocean/forest/warm；设置弹窗修改即写回，启动时由 `App.applyTheme` 应用。
 - 窗口位置/大小存 `settings.Config.Window`；`App.Attach` 注册 OnMove/OnResize 保存，
   `main` 启动时用 `windowPosition` 校验仍有部分在屏幕内才恢复，否则居中。
 - tab：`App.open` 用 `NewRootLazy` 打开仓库（`gitx.Open` 的 `rev-parse --show-toplevel`

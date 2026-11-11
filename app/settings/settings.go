@@ -21,7 +21,44 @@ type Config struct {
 	Version int      `json:"version"`
 	Layout  Layout   `json:"layout"`
 	Window  Window   `json:"window"`
+	Theme   Theme    `json:"theme"`
 	Recent  []string `json:"recent,omitempty"`
+}
+
+// Theme chooses one of the Lobe presets: a light/dark mode and a neutral
+// palette.
+type Theme struct {
+	Mode   string `json:"mode,omitempty"`
+	Scheme string `json:"scheme,omitempty"`
+}
+
+const (
+	ThemeSystem = "system"
+	ThemeLight  = "light"
+	ThemeDark   = "dark"
+
+	SchemeDefault = "default"
+	SchemeOcean   = "ocean"
+	SchemeForest  = "forest"
+	SchemeWarm    = "warm"
+)
+
+// DefaultTheme is the preset used for a new configuration.
+func DefaultTheme() Theme { return Theme{Mode: ThemeSystem, Scheme: SchemeDefault} }
+
+// Normalize falls back to the default mode or scheme for unknown values.
+func (t Theme) Normalize() Theme {
+	switch t.Mode {
+	case ThemeLight, ThemeDark:
+	default:
+		t.Mode = ThemeSystem
+	}
+	switch t.Scheme {
+	case SchemeOcean, SchemeForest, SchemeWarm:
+	default:
+		t.Scheme = SchemeDefault
+	}
+	return t
 }
 
 // Window is the main window's last position and size, in DIPs.
@@ -48,6 +85,7 @@ func Default() Config {
 			CommitPercent: 44,
 		},
 		Window: Window{Width: 1280, Height: 820},
+		Theme:  DefaultTheme(),
 	}
 }
 
@@ -189,5 +227,6 @@ func withDefaults(cfg Config) Config {
 	if cfg.Window.Height <= 0 {
 		cfg.Window.Height = d.Window.Height
 	}
+	cfg.Theme = cfg.Theme.Normalize()
 	return cfg
 }

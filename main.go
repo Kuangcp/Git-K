@@ -82,12 +82,15 @@ func main() {
 			height = 520
 		}
 		wo := mygo.WindowOptions{
-			Title:     "Git-K",
-			Width:     width,
-			Height:    height,
-			MinWidth:  760,
-			MinHeight: 520,
-			Content:   mygoUI.View(app.View),
+			Title:           "Git-K",
+			Width:           width,
+			Height:          height,
+			MinWidth:        760,
+			MinHeight:       520,
+			Frameless:       true,
+			CornerRadius:    10,
+			BackgroundColor: ui.WindowBackgroundColor(cfg.Theme),
+			Content:         mygoUI.View(app.View),
 		}
 		if x, y, ok := windowPosition(cfg.Window, mygo.Screen.Displays()); ok {
 			wo.X, wo.Y = x, y

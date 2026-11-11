@@ -20,16 +20,17 @@ type Tab struct {
 // App is the window and its tabs. Each tab owns one repository; the
 // window shows the active tab.
 type App struct {
-	win        *mygo.Window
-	tabs       []*Tab
-	active     int
-	settings   *settings.Store
-	openErr    string
-	toast      string
-	icon       ui.ImageSource
-	loadOpen   bool
-	recentList []string
-	dirty      bool
+	win          *mygo.Window
+	tabs         []*Tab
+	active       int
+	settings     *settings.Store
+	openErr      string
+	toast        string
+	icon         ui.ImageSource
+	loadOpen     bool
+	settingsOpen bool
+	recentList   []string
+	dirty        bool
 	// pending holds launch directories that arrived before the window.
 	pending []pendingOpen
 }
@@ -102,7 +103,9 @@ func (a *App) saveBounds() {
 
 // View builds the tab bar and the active repository.
 func (a *App) View(c *ui.Context) {
+	a.applyTheme(c)
 	ui.Column(c).Fill().Children(func() {
+		a.titleBar(c)
 		if len(a.tabs) > 1 {
 			a.tabBar(c)
 		}
@@ -116,6 +119,7 @@ func (a *App) View(c *ui.Context) {
 			a.toast = ""
 		}
 	})
+	a.settingsModal(c)
 	a.shortcuts(c)
 }
 
