@@ -125,6 +125,7 @@ func runGit(dir string, stdin []byte, args ...string) ([]byte, error) {
 
 func run(dir string, stdin []byte, args ...string) Result {
 	cmd := exec.Command("git", args...)
+	hideConsole(cmd)
 	cmd.Dir = dir
 	cmd.Env = gitEnv()
 	if stdin != nil {
@@ -148,6 +149,7 @@ func run(dir string, stdin []byte, args ...string) Result {
 
 func (r *Repo) run(ctx context.Context, stdin []byte, args ...string) Result {
 	cmd := exec.CommandContext(ctx, "git", args...)
+	hideConsole(cmd)
 	cmd.Dir = r.Root
 	cmd.Env = gitEnv()
 	if stdin != nil {
