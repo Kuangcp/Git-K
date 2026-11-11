@@ -13,7 +13,26 @@ import (
 	"git-k/app/gitx"
 )
 
-var refreshIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/></svg>`))
+var (
+	refreshIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/></svg>`))
+	pullIcon    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>`))
+	pushIcon    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg>`))
+)
+
+// iconButton builds a small toolbar button showing an icon.
+func iconButton(c *ui.Context, icon *ui.SVG, label, tip string, onClick func()) {
+	t := c.Theme()
+	b := ui.ButtonBase(c).Width(28).Height(28).Label(label).Tooltip(tip)
+	b.Children(func() {
+		ui.Icon(c, icon).Width(16).Height(16)
+	})
+	if b.Hovered() {
+		b = b.Background(t.SurfaceHover).Radius(t.Radius)
+	}
+	if b.Clicked() {
+		onClick()
+	}
+}
 
 func (a *root) topBar(c *ui.Context) {
 	t := c.Theme()
@@ -59,16 +78,9 @@ func (a *root) topBar(c *ui.Context) {
 				a.chooseRepo()
 			}
 		}
-		refresh := ui.ButtonBase(c).Width(28).Height(28).Label("刷新").Tooltip("刷新 (F5)")
-		refresh.Children(func() {
-			ui.Icon(c, refreshIcon).Width(16).Height(16)
-		})
-		if refresh.Hovered() {
-			refresh = refresh.Background(t.SurfaceHover).Radius(t.Radius)
-		}
-		if refresh.Clicked() {
-			a.refreshStatus()
-		}
+		iconButton(c, pullIcon, "拉取", "拉取 (Ctrl+L)", a.pull)
+		iconButton(c, pushIcon, "推送", "推送 (Ctrl+P)", a.push)
+		iconButton(c, refreshIcon, "刷新", "刷新 (F5)", a.refreshStatus)
 	})
 }
 
@@ -398,7 +410,7 @@ func (a *root) footer(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新 · Ctrl+P 推送 · Ctrl+Q 退出").
+		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新 · Ctrl+L 拉取 · Ctrl+P 推送 · Ctrl+Q 退出").
 			FontSize(11).TextColor(t.TextMuted).Grow(1)
 		if a.status.Upstream != "" {
 			ui.Text(c, a.status.Upstream).FontSize(11).TextColor(t.TextMuted).SingleLine()

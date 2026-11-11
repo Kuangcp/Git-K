@@ -135,7 +135,9 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
   `git rm -r --cached --ignore-unmatch`。
 - 提交用 `git commit -F -`，消息走 stdin；不要拼 shell 字符串，不要写临时消息文件。
   提交钩子可能很久，超时给 10 分钟，期间 UI 显示忙碌态。
-- 推送用 `git push`（`Repo.Push`），不拼 shell；失败信息写回 `note`，超时 5 分钟。
+- 推送/拉取用 `git push` / `git pull`（`Repo.Push` / `Repo.Pull`），不拼 shell；
+  失败信息写回 `note`，超时 5 分钟。环境设 `GIT_MERGE_AUTOEDIT=no`，避免 pull 打开
+  编辑器。
 - 修正提交不再用勾选框：`Ctrl+M` 调 `Repo.LoadAmend` 读取 HEAD 的 message 并把 index
   reset 到 HEAD（工作区不动），UI 进入 `amendMode`；用户改完提交时才走
   `git commit --amend`。
@@ -174,7 +176,7 @@ ui/ui_test.go        无窗口的视图 + 临时仓库端到端测试
   写入 `.git/GIT_K_MSG`，读回时由 `splitMessage()` 拆成两个框，提交成功后清空。
 - 快捷键对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、`Ctrl+U` 取消暂存、
   `Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+M` 加载上次提交进入修正模式、
-  `Ctrl+P` 推送。用 `Context.Shortcut`，不要全局 hook。
+  `Ctrl+P` 推送、`Ctrl+L` 拉取。用 `Context.Shortcut`，不要全局 hook。
 - 错误必须可见：状态错误在列表里，diff 错误在 diff 面板，提交失败在提交面板；
   不要把错误吞掉或只写日志。`root.setNote` 的提示（提交成功、操作失败等）显示 3 秒
   后自动消失；新的提示会刷新计时。

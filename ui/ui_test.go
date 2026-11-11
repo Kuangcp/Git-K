@@ -526,6 +526,36 @@ func TestAmendShortcut(t *testing.T) {
 	}
 }
 
+// Ctrl+L pulls the current branch's upstream.
+func TestPullShortcut(t *testing.T) {
+	dir := newRepo(t)
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "first")
+	origin := t.TempDir()
+	git(t, origin, "init", "--bare", "-q", "-b", "main")
+	git(t, dir, "remote", "add", "origin", origin)
+	git(t, dir, "push", "-q", "-u", "origin", "main")
+
+	other := t.TempDir()
+	git(t, other, "clone", "-q", origin, ".")
+	if err := os.WriteFile(filepath.Join(other, "b.txt"), []byte("upstream\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, other, "add", "b.txt")
+	git(t, other, "commit", "-q", "-m", "upstream")
+	git(t, other, "push", "-q")
+
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+	tt.Key(ui.Ctrl, ui.KeyL)
+	tt.Frame()
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); err != nil {
+		t.Fatalf("pull did not bring the file: %v (note %q)", err, r.note)
+	}
+}
+
 // Ctrl+P pushes the current branch.
 func TestPushShortcut(t *testing.T) {
 	dir := newRepo(t)

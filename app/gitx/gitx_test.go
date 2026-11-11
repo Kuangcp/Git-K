@@ -166,6 +166,39 @@ func TestRemoveFilesUntrackedOnly(t *testing.T) {
 
 // LoadAmend returns the last commit's message and resets the index to
 // HEAD, leaving the working tree's changes in place.
+// Pull brings an upstream commit into the working tree.
+func TestPull(t *testing.T) {
+	ctx := context.Background()
+	origin := t.TempDir()
+	git(t, origin, "init", "--bare", "-q", "-b", "main")
+
+	repo, dir := newRepo(t)
+	write(t, dir, "a.txt", "hello\n")
+	if err := repo.Stage(ctx, []string{"a.txt"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Commit(ctx, "first", false); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "remote", "add", "origin", origin)
+	git(t, dir, "push", "-q", "-u", "origin", "main")
+
+	other := t.TempDir()
+	git(t, other, "clone", "-q", origin, ".")
+	write(t, other, "b.txt", "from upstream\n")
+	git(t, other, "add", "b.txt")
+	git(t, other, "commit", "-q", "-m", "upstream")
+	git(t, other, "push", "-q")
+
+	out, err := repo.Pull(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); err != nil {
+		t.Fatalf("pulled file missing: %v (out %q, log %q)", err, out, git(t, dir, "log", "--oneline", "-3"))
+	}
+}
+
 // Push sends the current branch upstream.
 func TestPush(t *testing.T) {
 	ctx := context.Background()
@@ -178,7 +211,7 @@ func TestPush(t *testing.T) {
 		t.Fatal(err)
 	}
 	bare := t.TempDir()
-	git(t, bare, "init", "--bare", "-q")
+	git(t, bare, "init", "--bare", "-q", "-b", "main")
 	git(t, dir, "remote", "add", "origin", bare)
 	git(t, dir, "push", "-q", "-u", "origin", "main")
 
