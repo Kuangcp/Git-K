@@ -66,6 +66,7 @@ tidy:
 # 由 assets/icon.svg 的同一几何生成 assets/icon-{256,512}.png。
 icon:
 	CGO_ENABLED=0 $(GO) run ./tools/genicon
+	CGO_ENABLED=0 $(GO) run ./tools/winres
 
 clean:
 	rm -f $(BIN)

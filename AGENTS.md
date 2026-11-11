@@ -19,6 +19,10 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
   几何/配色光栅化出 256 与 512 两张 PNG，不依赖外部 SVG 渲染器。改图标时两份一起改，
   再跑 `make icon`。`main.go` 用 `//go:embed assets/icon-256.png` 设置窗口与 Dock 图标，
   `mygo.json` 的 `icon` 指向 512。`main_test.go` 会抽样像素，防止图标画空。
+- **Windows 图标**：`make icon` 还会跑 `tools/winres`，生成 `assets/icon.ico` 和
+  `icon_windows_{amd64,arm64}.syso`。Windows 固定到任务栏读取的是 exe 的图标资源，
+  运行时 `SetIcon` 不够；这两个 `.syso` 必须随仓库提交，`go build` 会自动链接对应
+  GOARCH 的文件。
 
 ## 常用命令
 
@@ -45,8 +49,10 @@ make icon     # go run ./tools/genicon，重生成 assets/icon-{256,512}.png
 
 ```
 main.go              CLI、单实例、窗口生命周期、settings 注入
-assets/              图标设计源与生成位图
+assets/              图标设计源、PNG、ICO
+icon_windows_*.syso  嵌入 exe 的 Windows 图标资源
 tools/genicon/       与 SVG 同一几何的纯 Go 光栅化器
+tools/winres/        生成 icon.ico 与 Windows 图标 .syso 资源
 app/gitx/            唯一的 git 边界
   repo.go            运行器、固定环境、Repo 元数据、Windows 控制台隐藏
   status.go          porcelain v2 -z 解析与分组
