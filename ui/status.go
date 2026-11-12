@@ -71,7 +71,6 @@ func (a *root) applyStatus(gen uint64, st gitx.Status, err error) {
 	if a.cur < 0 {
 		a.chosen.Clear()
 	}
-	a.updateTitle()
 }
 
 func (a *root) pruneChosen() {

@@ -430,18 +430,20 @@ func TestGroupHeaderShowsAllDiffs(t *testing.T) {
 	}
 }
 
-// Ctrl+Q asks the application to quit.
-func TestQuitShortcut(t *testing.T) {
+// Ctrl+Q minimizes the window instead of quitting the app.
+func TestMinimizeShortcut(t *testing.T) {
 	dir := newRepo(t)
-	r := NewRoot(dir)
-	defer r.stopWatch()
-	quit := false
-	r.quit = func() { quit = true }
-	tt := ui.NewTester(r.View, 1100, 800)
+	app := NewApp(nil)
+	if err := app.open(dir); err != nil {
+		t.Fatal(err)
+	}
+	minimized := false
+	app.minimize = func() { minimized = true }
+	tt := ui.NewTester(app.View, 1100, 800)
 	tt.Frame()
 	tt.Key(ui.Ctrl, ui.KeyQ)
-	if !quit {
-		t.Fatal("Ctrl+Q did not quit")
+	if !minimized {
+		t.Fatal("Ctrl+Q did not minimize")
 	}
 }
 

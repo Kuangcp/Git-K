@@ -29,8 +29,13 @@ type App struct {
 	icon         ui.ImageSource
 	loadOpen     bool
 	settingsOpen bool
+	settingsTab  int
 	recentList   []string
 	dirty        bool
+	keys         *bindings
+	// minimize lets tests observe the window action; nil minimizes the
+	// real window.
+	minimize func()
 	// pending holds launch directories that arrived before the window.
 	pending []pendingOpen
 }
@@ -42,7 +47,11 @@ type pendingOpen struct {
 
 // NewApp creates an app with no tabs.
 func NewApp(st *settings.Store) *App {
-	return &App{settings: st, active: -1, dirty: true}
+	a := &App{settings: st, active: -1, dirty: true, keys: newBindings()}
+	if st != nil {
+		a.keys.load(st.Config().Shortcuts)
+	}
+	return a
 }
 
 // SetIconPNG gives the home page the app's icon.
@@ -73,9 +82,6 @@ func (a *App) Attach(win *mygo.Window) {
 		if t.root.win == nil {
 			t.root.Attach(win)
 		}
-	}
-	if a.active >= 0 {
-		a.syncTitle()
 	}
 	pending := a.pending
 	a.pending = nil
@@ -176,12 +182,11 @@ func (a *App) open(dir string) error {
 		a.touchRecent(key)
 		return nil
 	}
-	r.onTitle = a.syncTitle
 	r.openTab = a.OpenAndFocus
 	r.pickRepo = a.chooseRepo
 	r.loadOpen = &a.loadOpen
 	r.loadMenu = a.loadPopover
-	r.quit = mygo.App.Quit
+	r.keys = a.keys
 	a.tabs = append(a.tabs, &Tab{key: key, root: r})
 	a.openErr = ""
 	a.touchRecent(key)
@@ -218,7 +223,6 @@ func (a *App) activate(i int) {
 	if a.win != nil && r.win == nil {
 		r.Attach(a.win)
 	}
-	a.syncTitle()
 }
 
 func (a *App) closeAt(i int) {
@@ -231,48 +235,50 @@ func (a *App) closeAt(i int) {
 	switch {
 	case len(a.tabs) == 0:
 		a.active = -1
-		a.syncTitle()
 	case wasActive:
 		a.active = min(i, len(a.tabs)-1)
 		a.activate(a.active)
 	case a.active > i:
 		a.active--
-		a.syncTitle()
-	default:
-		a.syncTitle()
 	}
 }
 
-func (a *App) syncTitle() {
-	if a.win == nil {
-		return
-	}
-	if a.active < 0 || a.active >= len(a.tabs) {
-		a.win.SetTitle("Git-K")
-		return
-	}
-	a.win.SetTitle(repoTitle(a.tabs[a.active].root))
-}
-
-// shortcuts handles window-level tab keys; the active tab handles its own.
+// shortcuts handles window-level keys; the active tab handles its own.
+// Recordings in the settings dialog see the keys first and suppress
+// dispatch for the frame.
 func (a *App) shortcuts(c *ui.Context) {
-	if c.Shortcut(ui.Ctrl, ui.KeyQ) {
-		mygo.App.Quit()
+	if a.keys.capturing() {
 		return
 	}
-	if c.Shortcut(ui.Ctrl, ui.KeyW) {
-		a.closeAt(a.active)
-		c.Invalidate()
+	for _, act := range keyActions {
+		if act.Scope != scopeWindow || !a.keys.hit(c, act.ID) {
+			continue
+		}
+		switch act.ID {
+		case "minimize":
+			a.minimizeWindow()
+		case "closeTab":
+			a.closeAt(a.active)
+			c.Invalidate()
+		case "nextTab":
+			a.cycle(1)
+			c.Invalidate()
+		case "prevTab":
+			a.cycle(-1)
+			c.Invalidate()
+		}
 		return
 	}
-	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyTab) {
-		a.cycle(-1)
-		c.Invalidate()
+}
+
+// minimizeWindow minimizes the window; Ctrl+Q no longer quits the app.
+func (a *App) minimizeWindow() {
+	if a.minimize != nil {
+		a.minimize()
 		return
 	}
-	if c.Shortcut(ui.Ctrl, ui.KeyTab) {
-		a.cycle(1)
-		c.Invalidate()
+	if a.win != nil {
+		a.win.Minimize()
 	}
 }
 

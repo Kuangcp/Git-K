@@ -23,6 +23,9 @@ type Config struct {
 	Window  Window   `json:"window"`
 	Theme   Theme    `json:"theme"`
 	Recent  []string `json:"recent,omitempty"`
+	// Shortcuts maps action IDs to their user-set chords. Actions not
+	// listed keep their defaults; an empty value means unbound.
+	Shortcuts map[string]string `json:"shortcuts,omitempty"`
 }
 
 // Theme chooses one of the Lobe presets: a light/dark mode and a neutral

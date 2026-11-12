@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -30,8 +29,7 @@ type listEntry struct {
 type root struct {
 	win      *mygo.Window
 	repo     *gitx.Repo
-	quit     func()
-	onTitle  func()
+	keys     *bindings
 	openTab  func(string)
 	pickRepo func()
 	loadOpen *bool
@@ -121,7 +119,6 @@ func newRoot(dir string, st *settings.Store, lazy bool) *root {
 		sidePercent:   48,
 		commitPercent: 44,
 		cur:           -1,
-		quit:          mygo.App.Quit,
 		settings:      st,
 	}
 	a.loadLayout()
@@ -164,7 +161,6 @@ func newRoot(dir string, st *settings.Store, lazy bool) *root {
 // refreshes the status.
 func (a *root) Attach(win *mygo.Window) {
 	a.win = win
-	a.updateTitle()
 	a.refreshStatus()
 }
 
@@ -254,32 +250,6 @@ func (a *root) background(fn func()) {
 	go fn()
 }
 
-func (a *root) updateTitle() {
-	if a.onTitle != nil {
-		a.onTitle()
-		return
-	}
-	if a.win == nil || a.repo == nil {
-		return
-	}
-	a.win.SetTitle(repoTitle(a))
-}
-
-// repoTitle is the window title for a repository tab.
-func repoTitle(a *root) string {
-	if a.repo == nil {
-		return "Git-K"
-	}
-	branch := a.status.Branch
-	if branch == "" {
-		branch = "(无分支)"
-	}
-	if a.status.Detached {
-		branch = "detached"
-	}
-	return fmt.Sprintf("%s — %s — Git-K", a.repo.Name, branch)
-}
-
 // loadLayout takes the shared split ratios, as another tab may have moved
 // them since this tab was built.
 func (a *root) loadLayout() {
@@ -331,7 +301,6 @@ func (a *root) openRepo(dir string) {
 	if !a.deferStatus {
 		a.refreshStatus()
 	}
-	a.updateTitle()
 	if a.win != nil {
 		a.startWatch()
 	}

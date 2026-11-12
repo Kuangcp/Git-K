@@ -47,10 +47,14 @@ func (a *root) commitPane(c *ui.Context) {
 						a.setNote("")
 						c.Invalidate()
 					}
-				} else {
-					ui.Text(c, "Ctrl+M 修正上次").FontSize(11).TextColor(t.TextMuted)
+				} else if s := a.keyHint("amend", "修正上次"); s != "" {
+					ui.Text(c, s).FontSize(11).TextColor(t.TextMuted)
 				}
-				ui.Text(c, "Ctrl+↵ 提交").FontSize(11).TextColor(t.TextMuted).Grow(1)
+				if s := a.keyHint("commit", "提交"); s != "" {
+					ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).Grow(1)
+				} else {
+					ui.Text(c, "").Grow(1)
+				}
 			})
 		})
 	})

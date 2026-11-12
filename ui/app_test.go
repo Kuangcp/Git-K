@@ -79,6 +79,26 @@ func TestOpenFromSubdir(t *testing.T) {
 	}
 }
 
+// The active repository's name is centered in the title bar.
+func TestTitleBarCenter(t *testing.T) {
+	dir := newRepo(t)
+	app := NewApp(nil)
+	if err := app.open(dir); err != nil {
+		t.Fatal(err)
+	}
+	name := app.activeName()
+	tt := ui.NewTester(app.View, 1100, 800)
+	tt.Frame()
+	rect, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("title name missing: %v", tt.Texts())
+	}
+	center := rect.X + rect.W/2
+	if center < 545 || center > 555 {
+		t.Fatalf("title center: %v, want about 550", center)
+	}
+}
+
 // Clicking a tab focuses it.
 func TestAppTabClick(t *testing.T) {
 	dir1 := newRepo(t)

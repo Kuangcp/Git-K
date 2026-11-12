@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 
@@ -33,25 +34,7 @@ func (a *root) topBar(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(46).PaddingX(14).Gap(10).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, a.repo.Name).FontSize(15).Bold().TextColor(t.Accent).SingleLine()
-		ui.Text(c, a.repo.Root).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1)
-
-		branch := a.status.Branch
-		if branch == "" {
-			branch = "(无分支)"
-		}
-		if a.status.Detached {
-			branch = "detached"
-		}
-		ui.Row(c).Height(24).PaddingX(8).Radius(6).BorderWidth(1).BorderColor(t.Border).
-			AlignItems(ui.Center).Children(func() {
-			ui.Text(c, branch).FontSize(12).SingleLine()
-		})
-		if a.status.Ahead > 0 || a.status.Behind > 0 {
-			ui.Text(c, fmt.Sprintf("↑%d ↓%d", a.status.Ahead, a.status.Behind)).
-				FontSize(11).TextColor(t.TextMuted)
-		}
-
+		ui.Text(c, "").Grow(1)
 		if ui.Button(c, "全部暂存").Disabled(a.busy || a.status.Total() == 0).Clicked() {
 			a.stageAll()
 		}
@@ -73,21 +56,56 @@ func (a *root) topBar(c *ui.Context) {
 				a.chooseRepo()
 			}
 		}
-		iconButton(c, pullIcon, "拉取", "拉取 (Ctrl+L)", a.pull)
-		iconButton(c, pushIcon, "推送", "推送 (Ctrl+P)", a.push)
-		iconButton(c, refreshIcon, "刷新", "刷新 (F5)", a.refreshStatus)
+		iconButton(c, pullIcon, "拉取", a.keyTip("pull", "拉取"), a.pull)
+		iconButton(c, pushIcon, "推送", a.keyTip("push", "推送"), a.push)
+		iconButton(c, refreshIcon, "刷新", a.keyTip("refresh", "刷新"), a.refreshStatus)
 	})
+}
+
+// keyTip is a toolbar tooltip with the action's current chord.
+func (a *root) keyTip(id, label string) string {
+	if s := a.keys.chordText(id); s != "" {
+		return label + " (" + s + ")"
+	}
+	return label
+}
+
+// keyHint is "Ctrl+S 暂存" for the footer, or "" when unbound.
+func (a *root) keyHint(id, label string) string {
+	return a.keys.hintFor(id, label)
 }
 
 func (a *root) footer(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, "Ctrl+S 暂存 · Ctrl+U 取消暂存 · Ctrl+Shift+S 全部暂存 · 双击行 切换暂存 · F5 刷新 · Ctrl+L 拉取 · Ctrl+P 推送 · Ctrl+Q 退出").
-			FontSize(11).TextColor(t.TextMuted).Grow(1)
-		if a.status.Upstream != "" {
-			ui.Text(c, a.status.Upstream).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		var hints []string
+		for _, h := range [][2]string{
+			{"stage", "暂存"}, {"unstage", "取消暂存"}, {"stageAll", "全部暂存"},
+			{"refresh", "刷新"}, {"pull", "拉取"}, {"push", "推送"},
+			{"minimize", "最小化"},
+		} {
+			if s := a.keyHint(h[0], h[1]); s != "" {
+				hints = append(hints, s)
+			}
 		}
+		hints = append(hints, "双击行 切换暂存")
+		ui.Text(c, strings.Join(hints, " · ")).
+			FontSize(11).TextColor(t.TextMuted).Grow(1)
+		branch := a.status.Branch
+		if branch == "" {
+			branch = "(无分支)"
+		}
+		if a.status.Detached {
+			branch = "detached"
+		}
+		ui.Text(c, branch).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		if a.status.Ahead > 0 || a.status.Behind > 0 {
+			ui.Text(c, fmt.Sprintf("↑%d ↓%d", a.status.Ahead, a.status.Behind)).
+				FontSize(11).TextColor(t.TextMuted)
+		}
+		ui.Text(c, a.repo.Root).FontSize(11).TextColor(t.TextMuted).SingleLine().
+			MaxWidth(440).Tooltip(a.repo.Root)
 	})
 }
 

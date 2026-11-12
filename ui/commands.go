@@ -5,40 +5,38 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// shortcuts dispatches the repository actions from the keymap. The
+// window actions (minimize, tabs) run in App.shortcuts.
 func (a *root) shortcuts(c *ui.Context) {
-	if c.Shortcut(ui.Ctrl, ui.KeyQ) {
-		if a.quit != nil {
-			a.quit()
+	if a.keys.capturing() {
+		return
+	}
+	if a.repo == nil {
+		return
+	}
+	for _, act := range keyActions {
+		if act.Scope != scopeRepo || !a.keys.hit(c, act.ID) {
+			continue
+		}
+		switch act.ID {
+		case "stage":
+			a.stageSelected()
+		case "stageAll":
+			a.stageAll()
+		case "unstage":
+			a.unstageSelected()
+		case "refresh":
+			a.refreshStatus()
+		case "amend":
+			a.loadAmend()
+		case "push":
+			a.push()
+		case "pull":
+			a.pull()
+		case "commit":
+			a.doCommit()
 		}
 		return
-	}
-	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyS) {
-		a.stageAll()
-		return
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyS) {
-		a.stageSelected()
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyU) {
-		a.unstageSelected()
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyR) || c.Shortcut(0, ui.KeyF5) {
-		a.refreshStatus()
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyM) {
-		a.loadAmend()
-		return
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyP) {
-		a.push()
-		return
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyL) {
-		a.pull()
-		return
-	}
-	if c.Shortcut(ui.Ctrl, ui.KeyEnter) {
-		a.doCommit()
 	}
 }
 

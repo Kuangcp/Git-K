@@ -9,8 +9,8 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
 - **无 WebView**：窗口内容是 `mygo.NewWindow(WindowOptions{Content: ui.View(...)})`，
   不加载 HTML/JS。不要给 `mygo.json` 打开 webview。
 - **无边框窗口**：主窗口 `Frameless: true`，由 `ui/titlebar.go` 自绘 32px 标题栏：
-  `DragWindow` 拖动/双击最大化，右侧是设置、最小化、最大化/还原、关闭。不要再依赖
-  系统标题栏；home 与仓库页共用同一条标题栏。
+  `DragWindow` 拖动/双击最大化；正中间显示当前 tab 的仓库名；左侧图标，右侧是设置、
+  最小化、最大化/还原、关闭。不要再依赖系统标题栏；home 与仓库页共用同一条标题栏。
 - **Go 1.27.3 / mygo v0.8.3**：`go.mod` 固定 mygo 版本，和 `db-g` 一致。升级前先跑
   `go test ./...` 和一次真实窗口冒烟。
 - **单窗口、多标签**：一个进程一个窗口，每个 tab 绑定一个工作树；同一仓库只能有一个
@@ -69,7 +69,7 @@ ui/                  窗口与 tab
   app.go             单窗口多 tab：去重、切换、关闭、标题、窗口 bounds
   titlebar.go        无边框窗口标题栏、拖动区、窗口控制
   theme.go           Lobe 主题预设解析与无边框窗口底色
-  settings_view.go   设置弹窗（主题模式/配色方案）
+  settings_view.go   设置弹窗（左侧外观/快捷键分类，右侧具体设置）
   tabs_view.go       tab 条视图
   home.go            首页、最近记录、加载历史仓库弹窗、选择目录
   root.go            单个 tab 的根状态、构造、View、布局、openRepo、异步桥
@@ -80,7 +80,8 @@ ui/                  窗口与 tab
   remote.go          pull / push
   watch.go           工作树与 .git 监听
   feedback.go        busy、3 秒自动消失的 note
-  commands.go        快捷键、选择目录
+  keymap.go          可配置快捷键：动作表、键位解析/格式化、持久化
+  commands.go        仓库快捷键分发、选择目录
   shell.go           顶栏、图标按钮、底栏、空态、通用视图 helpers
   status_view.go     状态面板与右键/删除确认
   commit_view.go     提交面板
@@ -163,7 +164,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
 
 ## 配置规则
 
-- `app/settings` 是唯一的配置读写边界：`Config` 新增字段即可扩展；`Open` 对缺失/
+- `app/settings` 是唯一的配置读写边界：`Config` 新增字段即可扩展（例如
+  `Shortcuts`）；`Open` 对缺失/
   损坏/缺字段的文件回退默认值；`Update` 防抖 400ms 后原子写入
   `$XDG_CONFIG_HOME/git-k/settings.json`（`os.UserConfigDir`），`Flush` 立即落盘。
 - 主程序在 `App.OnBeforeQuit` 和 `Run` 返回后都调用 `Flush`。
@@ -229,7 +231,9 @@ main.go ──> ui.App / ui.root ──> app/gitx
   每个文件的路径和独立的 `editor.DiffView`（`FitContent`），配色与单文件一致。
   `editor.DiffState` 一次只接受一个文件，所以按文件各存一个 state。列表变选
   （`List.Changed`）退出汇总。
-- `Ctrl+Q` 退出应用（`root.quit`，测试里替换为钩子）。
+- `Ctrl+Q` 最小化窗口，不退出应用（`App.minimizeWindow`，测试里替换
+  `app.minimize` 钩子）。窗口级动作（最小化/关闭 tab/切 tab）在 `App.shortcuts`
+  分发，仓库级动作在 `root.shortcuts` 分发。
 - 右键菜单动作作用于多选：右键的行在选中集合里时，暂存/取消暂存/撤销/删除都作用于
   全部选中行（`root.actionRows`）；撤销只取已修改行，删除只取未跟踪行。
 - 已修改行右键有「撤销修改…」，先用 `ui.AlertDialog` 二次确认，再走
@@ -238,16 +242,22 @@ main.go ──> ui.App / ui.root ──> app/gitx
 - 未跟踪行右键有「删除文件…」，先用 `ui.AlertDialog` 二次确认，再走
   `Repo.RemoveFiles`（一次 `git clean -q -f -- <paths...>`）。`git clean` 不会删已跟踪
   或已忽略的路径，状态过期也不会误删；失败写 `note`。
-- 状态字母 `A/M/D/R/C/U/?` 用主题语义色（`Success/Warning/Danger/Accent/TextMuted`），
+- 仓库路径放底栏，紧跟分支/ahead/behind 之后；仓库名只在标题栏和 tab 出现，顶栏不再
+  重复高亮仓库名。状态字母 `A/M/D/R/C/U/?` 用主题语义色（`Success/Warning/Danger/Accent/TextMuted`），
   不要在组件里写死十六进制。已暂存的 `M` 和 `R` 用 `Success`，和暂存的新增一致；
   工作区的 `M` 仍用 `Warning`，未暂存的重命名仍用 `Accent`。
 - 提交信息是两个输入框：单行 `TextInput`（`root.summary`，提交摘要）和
   `editor.View` + `editor.Buffer`（`root.body`，详细描述）。提交时由
   `root.message()` 拼成「摘要 + 空行 + 正文」；空正文时只有摘要。草稿 500ms 防抖
   写入 `.git/GIT_K_MSG`，读回时由 `splitMessage()` 拆成两个框，提交成功后清空。
-- 快捷键对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、`Ctrl+U` 取消暂存、
-  `Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+M` 加载上次提交进入修正模式、
-  `Ctrl+P` 推送、`Ctrl+L` 拉取。用 `Context.Shortcut`，不要全局 hook。
+- 快捷键默认对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、
+  `Ctrl+U` 取消暂存、`Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+M` 加载上次
+  提交进入修正模式、`Ctrl+P` 推送、`Ctrl+L` 拉取。全部动作在 `ui/keymap.go` 的
+  `keyActions` 里声明（ID、标签、作用域、默认键位），用 `bindings.hit` 走
+  `Context.Shortcut`，不要全局 hook。设置弹窗的「快捷键」分区可录制新组合、单项/
+  全部恢复默认；同作用域冲突时旧动作自动解绑。键位只把与默认不同的项存进
+  `settings.Config.Shortcuts`（`action → "Ctrl+Shift+S"`），启动时由 `NewApp`
+  加载。底栏和 tooltip 的提示从 `bindings` 生成，不要写死。
 - 错误必须可见：状态错误在列表里，diff 错误在 diff 面板，提交失败在提交面板；
   不要把错误吞掉或只写日志。`root.setNote` 的提示（提交成功、操作失败等）显示 3 秒
   后自动消失；新的提示会刷新计时。
@@ -265,6 +275,9 @@ main.go ──> ui.App / ui.root ──> app/gitx
   固定 author/committer。不要依赖网络、桌面或已有仓库。
 - 改动 UI 或 git 边界后必须至少做一次真实窗口冒烟（`make run` 或构建后启动），
   并在临时仓库里走一遍「改文件 → 看 status → 看 diff → 写信息 → 提交」。
+- 不要用 xdotool、鼠标移动/点击、截图脚本等自动化方式操作真实窗口做 UI 验收：
+  这会抢占用户正在使用的鼠标和键盘。启动窗口后，把需要目视确认的界面变化交给
+  用户人工确认；可自动验证的逻辑用 `ui.NewTester` 覆盖。
 - 不要写只验证「不 panic」「长度变大」的测试；断言分组、路径、计数、提交内容。
 
 ## 当前范围与已知限制

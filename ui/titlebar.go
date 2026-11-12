@@ -15,22 +15,37 @@ var (
 // titleBar is the frameless window's drag region and window controls.
 func (a *App) titleBar(c *ui.Context) {
 	t := c.Theme()
+	const side = 120
 	bar := ui.Row(c).Height(32).FillWidth().Padding(0, 8).Gap(2).
 		AlignItems(ui.Center).DragWindow().Background(t.Surface)
 	bar.Children(func() {
-		if a.icon != nil {
-			ui.Image(c, a.icon).Width(16).Height(16)
-		}
-		ui.Text(c, "").Grow(1)
-		iconButton(c, settingsIcon, "设置", "设置", func() { a.settingsOpen = true })
-		if a.win != nil {
-			iconButton(c, minimizeIcon, "最小化", "最小化", a.win.Minimize)
-			if a.win.IsMaximized() {
-				iconButton(c, restoreIcon, "还原", "还原", a.win.ToggleMaximize)
-			} else {
-				iconButton(c, maximizeIcon, "最大化", "最大化", a.win.ToggleMaximize)
+		left := ui.Row(c).Width(side).AlignItems(ui.Center)
+		left.Children(func() {
+			if a.icon != nil {
+				ui.Image(c, a.icon).Width(16).Height(16)
 			}
-			iconButton(c, closeIcon, "关闭", "关闭窗口", a.win.Close)
-		}
+		})
+		ui.Text(c, a.activeName()).FontSize(24).TextAlign(ui.Center).
+			SingleLine().Grow(1)
+		right := ui.Row(c).Width(side).Gap(2).AlignItems(ui.Center).Justify(ui.End)
+		right.Children(func() {
+			iconButton(c, settingsIcon, "设置", "设置", func() { a.settingsOpen = true })
+			if a.win != nil {
+				iconButton(c, minimizeIcon, "最小化", "最小化", a.win.Minimize)
+				if a.win.IsMaximized() {
+					iconButton(c, restoreIcon, "还原", "还原", a.win.ToggleMaximize)
+				} else {
+					iconButton(c, maximizeIcon, "最大化", "最大化", a.win.ToggleMaximize)
+				}
+				iconButton(c, closeIcon, "关闭", "关闭窗口", a.win.Close)
+			}
+		})
 	})
+}
+
+func (a *App) activeName() string {
+	if a.active >= 0 && a.active < len(a.tabs) {
+		return a.tabs[a.active].root.repo.Name
+	}
+	return "Git-K"
 }
