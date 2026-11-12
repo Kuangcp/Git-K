@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"unicode"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -22,9 +23,16 @@ func (a *App) loadPopover(c *ui.Context, anchor ui.Element) {
 				ui.Text(c, "没有其他历史仓库").FontSize(12).TextColor(t.TextMuted).Padding(4, 6)
 			}
 			for _, path := range closed {
-				if ui.Button(c, filepath.Base(path)).FillWidth().Height(30).
-					Justify(ui.Start).TextAlign(ui.Start).SingleLine().
-					Tooltip(path).Clicked() {
+				row := ui.ButtonBase(c).FillWidth().Height(30).Padding(2, 6).
+					Radius(t.Radius).Justify(ui.Start).AlignItems(ui.Center).
+					Label(filepath.Base(path)).Tooltip(path)
+				row.Children(func() {
+					ui.Text(c, filepath.Base(path)).SingleLine()
+				})
+				if row.Hovered() {
+					row = row.Background(t.SurfaceHover)
+				}
+				if row.Clicked() {
 					a.loadOpen = false
 					a.OpenAndFocus(path)
 				}
@@ -74,7 +82,6 @@ func (a *App) empty(c *ui.Context) {
 		} else {
 			ui.Text(c, "Git-K").FontSize(32).Bold()
 		}
-		ui.Text(c, "Git-K").FontSize(20).Bold()
 		ui.Column(c).Width(520).Gap(2).Children(func() {
 			ui.Row(c).Width(520).Height(30).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "最近打开").FontSize(12).Bold().TextColor(t.TextMuted).Grow(1)
@@ -86,7 +93,7 @@ func (a *App) empty(c *ui.Context) {
 				ui.Text(c, "还没有最近打开的仓库").FontSize(13).TextColor(t.TextMuted).Padding(8, 0)
 			}
 			for _, path := range recent {
-				item := ui.ButtonBase(c).FillWidth().Height(48).Padding(4, 12).
+				item := ui.ButtonBase(c).FillWidth().Height(64).Padding(4, 12).Gap(12).
 					Justify(ui.Start).AlignItems(ui.Center).
 					BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Radius(0).
 					Tooltip(path)
@@ -97,9 +104,16 @@ func (a *App) empty(c *ui.Context) {
 					}
 				})
 				item.Children(func() {
+					ui.Box(c).Width(48).Height(42).Children(func() {
+						ui.Icon(c, homeFolderIcon).Width(48).Height(42).TextColor(t.TextMuted)
+						ui.Row(c).Absolute().Left(0).Top(12).Width(48).Height(24).
+							Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, repoInitial(path)).FontSize(14).Bold().TextColor(t.Text)
+						})
+					})
 					ui.Column(c).Grow(1).Gap(0).Children(func() {
-						ui.Text(c, filepath.Base(path)).FontSize(16).Bold().SingleLine()
-						ui.Text(c, path).FontSize(11).TextColor(t.TextMuted).
+						ui.Text(c, filepath.Base(path)).FontSize(18).Bold().SingleLine()
+						ui.Text(c, path).FontSize(12).TextColor(t.TextMuted).
 							PaddingStart(22).SingleLine()
 					})
 				})
@@ -113,6 +127,19 @@ func (a *App) empty(c *ui.Context) {
 		})
 	})
 }
+
+// repoInitial is the first rune of the repository's name, uppercased for
+// scripts that have case, so CJK and other names keep their first glyph.
+func repoInitial(path string) string {
+	name := filepath.Base(path)
+	for _, r := range name {
+		return string(unicode.ToUpper(r))
+	}
+	return "?"
+}
+
+// homeFolderIcon outlines a folder holding the repository's initial.
+var homeFolderIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`))
 
 func (a *App) chooseRepo() {
 	if a.win == nil {

@@ -137,7 +137,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
   第一个进程后退出；`OnSecondInstance` 解析参数、按仓库根去重 tab、切换并
   `win.Show/Focus`。转发路径相对第二个进程的 cwd 解析。
 - 首页（无 tab）显示应用图标和最近打开仓库；`settings.Config.Recent` 保存规范化仓库
-  根，`App.touchRecent` 去重后放最前，最多 20 个；点击直接作为 tab 打开。首页条目
+  根，`App.touchRecent` 去重后放最前，最多 20 个；每条记录前是带仓库名首字母的
+  文件夹图标，点击直接作为 tab 打开。首页条目
   右键「删除记录」只删历史，不动仓库。
 - 有 tab 时顶栏的「加载仓库」图标用 `ui.Popover` 列出最近记录中当前未打开的仓库；点击即
   作为 tab 打开。`App.closedRecent` 过滤已打开仓库。
