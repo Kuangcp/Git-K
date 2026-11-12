@@ -373,7 +373,7 @@ func TestAppView(t *testing.T) {
 	app.tabs[0].root.refreshStatus() // no window in a test: read at once
 	tt := ui.NewTester(app.View, 1100, 800)
 	tt.Frame()
-	if !tt.HasText("a.txt") || !tt.HasText("未跟踪") || !tt.HasText("打开仓库…") {
+	if !tt.HasText("a.txt") || !tt.HasText("未跟踪") || !tt.HasText("打开仓库") {
 		t.Fatalf("tab content missing: %v", tt.Texts())
 	}
 }

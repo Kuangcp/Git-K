@@ -10,52 +10,72 @@ import (
 )
 
 var (
-	refreshIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/></svg>`))
-	pullIcon    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>`))
-	pushIcon    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg>`))
+	refreshIcon    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/></svg>`))
+	pullIcon       = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>`))
+	pushIcon       = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg>`))
+	stageAllIcon   = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>`))
+	unstageAllIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`))
+	recentIcon     = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`))
+	openRepoIcon   = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.4 10H20a2 2 0 0 1 1.9 2.5l-1.6 6A2 2 0 0 1 18.4 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H18a2 2 0 0 1 2 2v2"/></svg>`))
 )
 
+// toolbarDivider separates groups of related toolbar buttons.
+func toolbarDivider(c *ui.Context) {
+	ui.Box(c).Width(1).Height(18).Margin(0, 6, 0, 6).Background(c.Theme().Border)
+}
+
 // iconButton builds a small toolbar button showing an icon.
-func iconButton(c *ui.Context, icon *ui.SVG, label, tip string, onClick func()) {
+func iconButton(c *ui.Context, icon *ui.SVG, label, tip string, onClick func()) ui.Element {
+	return iconButtonDisabled(c, icon, label, tip, false, onClick)
+}
+
+// iconButtonDisabled is iconButton with a disabled state, for actions
+// that have nothing to do.
+func iconButtonDisabled(c *ui.Context, icon *ui.SVG, label, tip string, disabled bool, onClick func()) ui.Element {
 	t := c.Theme()
-	b := ui.ButtonBase(c).Width(28).Height(28).Label(label).Tooltip(tip)
+	b := ui.ButtonBase(c).Width(28).Height(28).Label(label).Tooltip(tip).Disabled(disabled)
+	if disabled {
+		b = b.TextColor(t.TextMuted)
+	}
 	b.Children(func() {
 		ui.Icon(c, icon).Width(16).Height(16)
 	})
-	if b.Hovered() {
+	if b.Hovered() && !disabled {
 		b = b.Background(t.SurfaceHover).Radius(t.Radius)
 	}
 	if b.Clicked() {
 		onClick()
 	}
+	return b
 }
 
 func (a *root) topBar(c *ui.Context) {
 	t := c.Theme()
-	ui.Row(c).Height(46).PaddingX(14).Gap(10).AlignItems(ui.Center).
+	ui.Row(c).Height(46).PaddingX(14).Gap(2).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		ui.Text(c, "").Grow(1)
-		if ui.Button(c, "全部暂存").Disabled(a.busy || a.status.Total() == 0).Clicked() {
-			a.stageAll()
-		}
-		if ui.Button(c, "全部取消").Disabled(a.busy || !a.status.HasStaged()).Clicked() {
-			a.unstageAll()
-		}
-		load := ui.Button(c, "加载仓库")
-		if load.Clicked() && a.loadOpen != nil {
-			*a.loadOpen = !*a.loadOpen
-			c.Invalidate()
-		}
+		iconButtonDisabled(c, stageAllIcon, "全部暂存", a.keyTip("stageAll", "全部暂存"),
+			a.busy || a.status.Total() == 0, a.stageAll)
+		iconButtonDisabled(c, unstageAllIcon, "全部取消", "全部取消暂存",
+			a.busy || !a.status.HasStaged(), a.unstageAll)
+		toolbarDivider(c)
+		load := iconButton(c, recentIcon, "加载仓库", "加载最近仓库", func() {
+			if a.loadOpen != nil {
+				*a.loadOpen = !*a.loadOpen
+				c.Invalidate()
+			}
+		})
 		if a.loadMenu != nil {
 			a.loadMenu(c, load)
 		}
-		if ui.Button(c, "打开仓库…").Clicked() {
+		iconButton(c, openRepoIcon, "打开仓库", "打开仓库…", func() {
 			if a.pickRepo != nil {
 				a.pickRepo()
 			} else {
 				a.chooseRepo()
 			}
-		}
+		})
+		toolbarDivider(c)
 		iconButton(c, pullIcon, "拉取", a.keyTip("pull", "拉取"), a.pull)
 		iconButton(c, pushIcon, "推送", a.keyTip("push", "推送"), a.push)
 		iconButton(c, refreshIcon, "刷新", a.keyTip("refresh", "刷新"), a.refreshStatus)

@@ -139,7 +139,7 @@ main.go ──> ui.App / ui.root ──> app/gitx
 - 首页（无 tab）显示应用图标和最近打开仓库；`settings.Config.Recent` 保存规范化仓库
   根，`App.touchRecent` 去重后放最前，最多 20 个；点击直接作为 tab 打开。首页条目
   右键「删除记录」只删历史，不动仓库。
-- 有 tab 时顶栏「加载仓库」用 `ui.Popover` 列出最近记录中当前未打开的仓库；点击即
+- 有 tab 时顶栏的「加载仓库」图标用 `ui.Popover` 列出最近记录中当前未打开的仓库；点击即
   作为 tab 打开。`App.closedRecent` 过滤已打开仓库。
 - 外观预设存 `settings.Config.Theme`：`Mode` 为 system/light/dark，`Scheme` 为
   default/ocean/forest/warm；设置弹窗修改即写回，启动时由 `App.applyTheme` 应用。
@@ -147,7 +147,7 @@ main.go ──> ui.App / ui.root ──> app/gitx
   `main` 启动时用 `windowPosition` 校验仍有部分在屏幕内才恢复，否则居中。
 - tab：`App.open` 用 `NewRootLazy` 打开仓库（`gitx.Open` 的 `rev-parse --show-toplevel`
   会把任意子目录解析到仓库根），`canonicalKey` 解析 symlink 后比较；同仓库直接激活
-  已有 tab。从第三级子目录启动也等价于从仓库根启动。顶栏「打开仓库…」走同一个入口。关闭 tab 调
+  已有 tab。从第三级子目录启动也等价于从仓库根启动。顶栏「打开仓库…」图标走同一个入口。关闭 tab 调
   `root.close`，异步结果经 `closed` 丢弃。打开失败用 `Context.Toast` 提示，不弹确认框。
 - 布局比例是所有 tab 共享的 `settings.Store` 值；切 tab 时 `root.loadLayout` 取最新。
 - git 查询/修改在 goroutine 里跑；结果只能通过 `root.update`（有窗口时是
@@ -231,6 +231,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
   每个文件的路径和独立的 `editor.DiffView`（`FitContent`），配色与单文件一致。
   `editor.DiffState` 一次只接受一个文件，所以按文件各存一个 state。列表变选
   （`List.Changed`）退出汇总。
+- 顶栏右侧全部用图标按钮，按功能分组并用 1px 竖线分隔：全部暂存/全部取消、
+  加载最近仓库/打开仓库、拉取/推送/刷新。无内容可操作时按钮置灰，tooltip 带当前键位。
 - `Ctrl+Q` 最小化窗口，不退出应用（`App.minimizeWindow`，测试里替换
   `app.minimize` 钩子）。窗口级动作（最小化/关闭 tab/切 tab）在 `App.shortcuts`
   分发，仓库级动作在 `root.shortcuts` 分发。
