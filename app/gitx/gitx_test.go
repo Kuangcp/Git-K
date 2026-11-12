@@ -41,6 +41,15 @@ func newRepo(t *testing.T) (*Repo, string) {
 	return repo, dir
 }
 
+func read(t *testing.T, dir, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func write(t *testing.T, dir, name, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
@@ -182,6 +191,36 @@ func TestRemoveFilesUntrackedOnly(t *testing.T) {
 
 // LoadAmend returns the last commit's message and resets the index to
 // HEAD, leaving the working tree's changes in place.
+// RevertFiles discards working tree changes, restoring from the index.
+func TestRevertFiles(t *testing.T) {
+	ctx := context.Background()
+	repo, dir := newRepo(t)
+	write(t, dir, "a.txt", "base\n")
+	if err := repo.Stage(ctx, []string{"a.txt"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Commit(ctx, "base", false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "a.txt", "staged\n")
+	git(t, dir, "add", "a.txt")
+	write(t, dir, "a.txt", "worktree\n")
+
+	if err := repo.RevertFiles(ctx, []string{"a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(read(t, dir, "a.txt")); got != "staged" {
+		t.Fatalf("reverted content: %q, want staged index content", got)
+	}
+	st, err := repo.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Count(Modified) != 0 || st.Count(Staged) != 1 {
+		t.Fatalf("status after revert: %+v", st.Rows)
+	}
+}
+
 // Pull brings an upstream commit into the working tree.
 func TestPull(t *testing.T) {
 	ctx := context.Background()

@@ -55,6 +55,8 @@ type root struct {
 
 	deletePaths []string
 	deleteAsk   bool
+	revertPaths []string
+	revertAsk   bool
 
 	summary   string
 	body      *editor.Buffer
@@ -195,6 +197,7 @@ func (a *root) View(c *ui.Context) {
 		a.footer(c)
 	})
 	a.deleteDialog(c)
+	a.revertDialog(c)
 	a.shortcuts(c)
 	if a.cur != curBefore {
 		// 点击选中的新行在本帧才写入 cur，下一帧再同步 diff。
@@ -319,6 +322,8 @@ func (a *root) openRepo(dir string) {
 	a.groupPrevCur = -1
 	a.deletePaths = nil
 	a.deleteAsk = false
+	a.revertPaths = nil
+	a.revertAsk = false
 	summary, body := splitMessage(repo.CommitMessage())
 	a.summary = summary
 	a.body.Reset(body)

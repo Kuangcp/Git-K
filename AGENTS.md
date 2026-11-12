@@ -230,8 +230,11 @@ main.go ──> ui.App / ui.root ──> app/gitx
   `editor.DiffState` 一次只接受一个文件，所以按文件各存一个 state。列表变选
   （`List.Changed`）退出汇总。
 - `Ctrl+Q` 退出应用（`root.quit`，测试里替换为钩子）。
-- 右键菜单动作作用于多选：右键的行在选中集合里时，暂存/取消暂存/删除都作用于全部
-  选中行（`root.actionRows`）；删除只取其中的未跟踪行。
+- 右键菜单动作作用于多选：右键的行在选中集合里时，暂存/取消暂存/撤销/删除都作用于
+  全部选中行（`root.actionRows`）；撤销只取已修改行，删除只取未跟踪行。
+- 已修改行右键有「撤销修改…」，先用 `ui.AlertDialog` 二次确认，再走
+  `Repo.RevertFiles`（`git restore -- <paths...>`）：只丢弃工作区修改，index 不动，
+  因此同一文件已暂存的内容会保留。
 - 未跟踪行右键有「删除文件…」，先用 `ui.AlertDialog` 二次确认，再走
   `Repo.RemoveFiles`（一次 `git clean -q -f -- <paths...>`）。`git clean` 不会删已跟踪
   或已忽略的路径，状态过期也不会误删；失败写 `note`。

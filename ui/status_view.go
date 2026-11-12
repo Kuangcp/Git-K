@@ -87,6 +87,15 @@ func (a *root) statusRow(c *ui.Context, i int) bool {
 		if m.Item("复制路径").Chosen() {
 			mygo.Clipboard.WriteText(e.row.Path)
 		}
+		modified := modifiedPaths(a.actionRows(e.row))
+		if len(modified) > 0 {
+			m.Separator()
+			if m.Item("撤销修改…").Danger().Chosen() {
+				a.revertPaths = modified
+				a.revertAsk = true
+				c.Invalidate()
+			}
+		}
 		paths := untrackedPaths(a.actionRows(e.row))
 		if len(paths) > 0 {
 			m.Separator()
@@ -127,6 +136,63 @@ func (a *root) toggleRow(e listEntry) {
 	}
 }
 
+// revertDialog asks before working tree changes are discarded.
+func (a *root) revertDialog(c *ui.Context) {
+	if !a.revertAsk {
+		a.revertPaths = nil
+		return
+	}
+	switch ui.AlertDialog(c, &a.revertAsk, "撤销修改？", fileListMessage("将丢弃这些文件在工作区的修改：", a.revertPaths), "取消", "撤销") {
+	case 0, ui.AlertDismissed:
+		a.revertPaths = nil
+	case 1:
+		paths := a.revertPaths
+		a.revertPaths = nil
+		a.revertFiles(paths)
+	}
+}
+
+func (a *root) revertFiles(paths []string) {
+	if a.busy || a.repo == nil || len(paths) == 0 {
+		return
+	}
+	a.setBusy(true)
+	repo := a.repo
+	a.background(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := repo.RevertFiles(ctx, paths)
+		cancel()
+		a.update(func() {
+			a.setBusy(false)
+			a.diffKey = ""
+			if err != nil {
+				a.setNote("撤销失败：" + err.Error())
+			} else {
+				a.setNote("已撤销修改")
+			}
+			a.refreshStatus()
+		})
+	})
+}
+
+// fileListMessage names paths in a confirmation, capping a long list.
+func fileListMessage(prefix string, paths []string) string {
+	const shown = 10
+	var b strings.Builder
+	b.WriteString(prefix)
+	b.WriteByte('\n')
+	for i, path := range paths {
+		if i == shown {
+			fmt.Fprintf(&b, "…等 %d 个文件\n", len(paths))
+			break
+		}
+		b.WriteString(gitx.DisplayPath(path))
+		b.WriteByte('\n')
+	}
+	b.WriteString("\n此操作无法撤销。")
+	return b.String()
+}
+
 // deleteDialog asks before untracked files are deleted: they are gone
 // from disk, not restored from git.
 func (a *root) deleteDialog(c *ui.Context) {
@@ -147,23 +213,10 @@ func (a *root) deleteDialog(c *ui.Context) {
 // deleteMessage names the files to delete, capping a long list so the
 // alert stays readable.
 func deleteMessage(paths []string) string {
-	const shown = 10
-	var b strings.Builder
 	if len(paths) == 1 {
-		b.WriteString("将从磁盘删除未跟踪的文件：\n")
-	} else {
-		fmt.Fprintf(&b, "将从磁盘删除 %d 个未跟踪的文件：\n", len(paths))
+		return fileListMessage("将从磁盘删除未跟踪的文件：", paths)
 	}
-	for i, path := range paths {
-		if i == shown {
-			fmt.Fprintf(&b, "…等 %d 个文件\n", len(paths))
-			break
-		}
-		b.WriteString(gitx.DisplayPath(path))
-		b.WriteByte('\n')
-	}
-	b.WriteString("\n此操作无法撤销。")
-	return b.String()
+	return fileListMessage(fmt.Sprintf("将从磁盘删除 %d 个未跟踪的文件：", len(paths)), paths)
 }
 
 func (a *root) deleteFiles(paths []string) {

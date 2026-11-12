@@ -46,6 +46,23 @@ func (a *root) actionRows(row gitx.Row) []gitx.Row {
 
 // untrackedPaths returns the paths of the untracked rows among rows, in
 // order and once each.
+// modifiedPaths returns the paths of the modified rows among rows.
+func modifiedPaths(rows []gitx.Row) []string {
+	seen := make(map[string]struct{}, len(rows))
+	var paths []string
+	for _, row := range rows {
+		if row.Group != gitx.Modified {
+			continue
+		}
+		if _, ok := seen[row.Path]; ok {
+			continue
+		}
+		seen[row.Path] = struct{}{}
+		paths = append(paths, row.Path)
+	}
+	return paths
+}
+
 func untrackedPaths(rows []gitx.Row) []string {
 	seen := make(map[string]struct{}, len(rows))
 	var paths []string

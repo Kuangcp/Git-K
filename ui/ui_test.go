@@ -34,6 +34,15 @@ func git(t *testing.T, dir string, args ...string) string {
 	return string(out)
 }
 
+func readFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -553,6 +562,57 @@ func TestPullShortcut(t *testing.T) {
 	tt.Frame()
 	if _, err := os.Stat(filepath.Join(dir, "b.txt")); err != nil {
 		t.Fatalf("pull did not bring the file: %v (note %q)", err, r.note)
+	}
+}
+
+// Reverting a modified file asks first, and only discards when confirmed.
+func TestRevertModifiedFile(t *testing.T) {
+	dir := newRepo(t)
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "base")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1100, 800)
+	tt.Frame()
+
+	open := func() {
+		t.Helper()
+		rect, ok := tt.Find("M")
+		if !ok {
+			t.Fatalf("modified code missing: %v", tt.Texts())
+		}
+		tt.RightClickAt(rect.X+rect.W/2, rect.Y+rect.H/2)
+		if err := tt.ChooseMenuItem("撤销修改…"); err != nil {
+			t.Fatalf("choose revert: %v", err)
+		}
+		tt.Frame()
+		if !tt.HasText("撤销修改？") {
+			t.Fatalf("confirmation missing: %v", tt.Texts())
+		}
+	}
+
+	open()
+	if err := tt.Click("取消"); err != nil {
+		t.Fatalf("click cancel: %v", err)
+	}
+	tt.Frame()
+	if got := readFile(t, dir, "a.txt"); got != "changed\n" {
+		t.Fatalf("cancel reverted the file: %q", got)
+	}
+
+	open()
+	if err := tt.Click("撤销"); err != nil {
+		t.Fatalf("click revert: %v", err)
+	}
+	tt.Frame()
+	if got := readFile(t, dir, "a.txt"); got != "hello\n" {
+		t.Fatalf("revert content: %q", got)
+	}
+	if got := r.status.Total(); got != 0 {
+		t.Fatalf("status after revert: %d changes", got)
 	}
 }
 
