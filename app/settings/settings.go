@@ -74,8 +74,10 @@ type Window struct {
 
 // Layout holds the window's split ratios, as percentages.
 type Layout struct {
-	SidePercent   float32 `json:"side_percent"`
-	CommitPercent float32 `json:"commit_percent"`
+	SidePercent         float32 `json:"side_percent"`
+	CommitPercent       float32 `json:"commit_percent"`
+	BranchGraphPercent  float32 `json:"branch_graph_percent"`
+	BranchDetailPercent float32 `json:"branch_detail_percent"`
 }
 
 // Default is the configuration used for a new file and for fields that a
@@ -84,8 +86,10 @@ func Default() Config {
 	return Config{
 		Version: Version,
 		Layout: Layout{
-			SidePercent:   48,
-			CommitPercent: 44,
+			SidePercent:         48,
+			CommitPercent:       44,
+			BranchGraphPercent:  38,
+			BranchDetailPercent: 52,
 		},
 		Window: Window{Width: 1280, Height: 820},
 		Theme:  DefaultTheme(),
@@ -223,6 +227,12 @@ func withDefaults(cfg Config) Config {
 	}
 	if cfg.Layout.CommitPercent <= 0 || cfg.Layout.CommitPercent >= 100 {
 		cfg.Layout.CommitPercent = d.Layout.CommitPercent
+	}
+	if cfg.Layout.BranchGraphPercent <= 0 || cfg.Layout.BranchGraphPercent >= 100 {
+		cfg.Layout.BranchGraphPercent = d.Layout.BranchGraphPercent
+	}
+	if cfg.Layout.BranchDetailPercent <= 0 || cfg.Layout.BranchDetailPercent >= 100 {
+		cfg.Layout.BranchDetailPercent = d.Layout.BranchDetailPercent
 	}
 	if cfg.Window.Width <= 0 {
 		cfg.Window.Width = d.Window.Width

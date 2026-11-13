@@ -46,40 +46,76 @@ func (a *root) diffPane(c *ui.Context) {
 				a.groupDiffPane(c)
 			}
 		} else {
-			switch a.diffMode {
-			case diffError:
-				ui.Column(c).Fill().Center().Padding(16).Children(func() {
-					ui.Text(c, "无法显示差异").FontSize(12).Bold()
-					ui.Text(c, a.diffErr).FontSize(11).TextColor(t.Danger).SingleLine().Tooltip(a.diffErr)
-				})
-			case diffBinary:
-				ui.Column(c).Fill().Center().Gap(6).Children(func() {
-					ui.Text(c, "二进制文件").FontSize(13).Bold()
-					ui.Text(c, fmt.Sprintf("+%d −%d（按行统计）", a.diffAdded, a.diffDeleted)).
-						FontSize(11).TextColor(t.TextMuted)
-				})
-			case diffEmpty:
-				ui.Column(c).Fill().Center().Children(func() {
-					ui.Text(c, "没有可显示的差异").FontSize(12).TextColor(t.TextMuted)
-				})
-			case diffRaw:
-				editor.View(c, &a.rawView).Fill()
-			case diffPatch:
-				editor.DiffView(c, &a.diff).Fill()
-			default:
-				ui.Column(c).Fill().Center().Children(func() {
-					switch {
-					case a.diffLoading:
-						ui.Text(c, "正在读取差异…").FontSize(12).TextColor(t.TextMuted)
-					case a.loaded && a.status.Total() == 0:
-						ui.Text(c, "工作区干净，没有差异").FontSize(12).TextColor(t.TextMuted)
-					default:
-						ui.Text(c, "选择一个文件查看差异").FontSize(12).TextColor(t.TextMuted)
-					}
-				})
+			idle := "选择一个文件查看差异"
+			if a.loaded && a.status.Total() == 0 {
+				idle = "工作区干净，没有差异"
 			}
+			showDiffBody(c, diffRender{
+				state:    &a.diff,
+				rawView:  &a.rawView,
+				mode:     a.diffMode,
+				err:      a.diffErr,
+				added:    a.diffAdded,
+				deleted:  a.diffDeleted,
+				loading:  a.diffLoading,
+				empty:    "没有可显示的差异",
+				idle:     idle,
+				selected: a.diffPath != "",
+			})
 		}
 	})
+}
+
+// diffRender is what showDiffBody needs from a diff view, whether the
+// workspace's or a commit's.
+type diffRender struct {
+	state    *editor.DiffState
+	rawView  *editor.State
+	mode     diffMode
+	err      string
+	added    int
+	deleted  int
+	loading  bool
+	empty    string
+	idle     string
+	selected bool
+}
+
+// showDiffBody renders a patch, a raw fallback, or an empty/error state.
+func showDiffBody(c *ui.Context, d diffRender) {
+	t := c.Theme()
+	switch d.mode {
+	case diffError:
+		ui.Column(c).Fill().Center().Padding(16).Children(func() {
+			ui.Text(c, "无法显示差异").FontSize(12).Bold()
+			ui.Text(c, d.err).FontSize(11).TextColor(t.Danger).SingleLine().Tooltip(d.err)
+		})
+	case diffBinary:
+		ui.Column(c).Fill().Center().Gap(6).Children(func() {
+			ui.Text(c, "二进制文件").FontSize(13).Bold()
+			ui.Text(c, fmt.Sprintf("+%d −%d（按行统计）", d.added, d.deleted)).
+				FontSize(11).TextColor(t.TextMuted)
+		})
+	case diffEmpty:
+		ui.Column(c).Fill().Center().Children(func() {
+			ui.Text(c, d.empty).FontSize(12).TextColor(t.TextMuted)
+		})
+	case diffRaw:
+		editor.View(c, d.rawView).Fill()
+	case diffPatch:
+		editor.DiffView(c, d.state).Fill()
+	default:
+		ui.Column(c).Fill().Center().Children(func() {
+			switch {
+			case d.loading:
+				ui.Text(c, "正在读取差异…").FontSize(12).TextColor(t.TextMuted)
+			case !d.selected && d.idle != "":
+				ui.Text(c, d.idle).FontSize(12).TextColor(t.TextMuted)
+			default:
+				ui.Text(c, "选择一个文件查看差异").FontSize(12).TextColor(t.TextMuted)
+			}
+		})
+	}
 }
 
 // groupDiffPane stacks the group's diffstat and each file's diff, which

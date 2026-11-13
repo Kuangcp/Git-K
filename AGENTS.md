@@ -64,6 +64,7 @@ app/gitx/            唯一的 git 边界
   commit.go          commit -F -、LoadAmend、GIT_K_MSG 草稿
   push.go/pull.go    push / pull
   remove.go          untracked 文件删除
+  history.go         提交图 log、提交信息、文件列表、单文件 diff
 app/settings/        通用 JSON 配置存储：默认值、合并、防抖原子写入；Theme 预设
 ui/                  窗口与 tab
   app.go             单窗口多 tab：去重、切换、关闭、标题、窗口 bounds
@@ -85,7 +86,8 @@ ui/                  窗口与 tab
   shell.go           顶栏、图标按钮、底栏、空态、通用视图 helpers
   status_view.go     状态面板与右键/删除确认
   commit_view.go     提交面板
-  diff_view.go       差异面板与分组汇总
+  diff_view.go       差异面板与分组汇总；工作区/提交共用差异渲染
+  branch.go          分支 tab：提交图、提交详情、文件列表、提交 diff
 ui/lobe/             vendored Lobe UI 主题 token（MIT）
 ui/app_test.go       tab、首页、最近记录、单实例参数相关测试
 ui/ui_test.go        无窗口视图 + 临时仓库端到端测试
@@ -204,6 +206,12 @@ main.go ──> ui.App / ui.root ──> app/gitx
 - stage/unstage 多选合并成一个进程；删除用 `git add -A`。
 - unborn HEAD 时 `git restore --staged` 不可用，改用
   `git rm -r --cached --ignore-unmatch`。
+- 历史浏览只读：`git log --topo-order --max-count=300`，主线分支时 rev 为
+  `refs/heads/<branch>`（含已合入的其它分支提交），ALL 时并集 `HEAD --branches`；NUL 分隔
+  字段解析出 hash/parents/author/time/refs/subject；lane 由 UI 计算。提交文件用
+  `git show --name-status -z --format=`，单文件补丁用
+  `git diff <first-parent> <hash> -- <path>`（根提交用 `git show --patch`）。
+  这些查询都不改仓库。
 - 提交用 `git commit -F -`，消息走 stdin；不要拼 shell 字符串，不要写临时消息文件。
   提交钩子可能很久，超时给 10 分钟，期间 UI 显示忙碌态。
 - 推送/拉取用 `git push` / `git pull`（`Repo.Push` / `Repo.Pull`），不拼 shell；
@@ -234,6 +242,13 @@ main.go ──> ui.App / ui.root ──> app/gitx
   （`List.Changed`）退出汇总。
 - 顶栏右侧全部用图标按钮，按功能分组并用 1px 竖线分隔：全部暂存/全部取消、
   加载最近仓库/打开仓库、拉取/推送/刷新。无内容可操作时按钮置灰，tooltip 带当前键位。
+- 每个仓库 tab 顶栏左侧有「工作区 / 分支」二级 tab（`root.pane`）。工作区就是原来的
+  commit/diff/status 三栏；分支 tab 左栏是提交图，右栏上下分为提交详情+文件列表和
+  文件 diff。两个 split 比例存 `Layout.BranchGraphPercent` / `BranchDetailPercent`，
+  与工作区比例互不影响。切换 tab 时重新读 log，但保留仍存在的选中提交。
+- 分支页复用工作区的差异渲染（`diffRender` / `showDiffBody`）和文件行
+  （`fileRowContent`）；提交详情、文件列表、diff 的选择状态各自放在 `root.branch`。
+  提交 diff 一律对第一父提交计算，避免 combined diff；补丁超限仍回退只读原文。
 - `Ctrl+Q` 最小化窗口，不退出应用（`App.minimizeWindow`，测试里替换
   `app.minimize` 钩子）。窗口级动作（最小化/关闭 tab/切 tab）在 `App.shortcuts`
   分发，仓库级动作在 `root.shortcuts` 分发。
@@ -255,7 +270,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
   写入 `.git/GIT_K_MSG`，读回时由 `splitMessage()` 拆成两个框，提交成功后清空。
 - 快捷键默认对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、
   `Ctrl+U` 取消暂存、`Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+M` 加载上次
-  提交进入修正模式、`Ctrl+P` 推送、`Ctrl+L` 拉取。全部动作在 `ui/keymap.go` 的
+  提交进入修正模式、`Ctrl+P` 推送、`Ctrl+L` 拉取、`Ctrl+1` 工作区、`Ctrl+2` 分支。
+  全部动作在 `ui/keymap.go` 的
   `keyActions` 里声明（ID、标签、作用域、默认键位），用 `bindings.hit` 走
   `Context.Shortcut`，不要全局 hook。设置弹窗的「快捷键」分区可录制新组合、单项/
   全部恢复默认；同作用域冲突时旧动作自动解绑。键位只把与默认不同的项存进
@@ -272,6 +288,10 @@ main.go ──> ui.App / ui.root ──> app/gitx
   冲突、未跟踪、空格/换行文件名、unborn。
 - `app/gitx/gitx_test.go`：`t.TempDir()` 里真实 `git init`，验证 stage/unstage/
   diff/commit/amend、字面量 pathspec、草稿往返。
+- `app/gitx/history_test.go`：log 顺序/parents/refs、提交信息、name-status 文件、
+  根提交与空仓库的 diff。
+- `ui/branch_test.go`：Ctrl+2 打开分支页、首个提交与文件列表、点击文件后的 diff、
+  Ctrl+1 返回工作区、提交图 lane 分配。
 - `ui/ui_test.go`：`ui.NewTester` 无窗口跑完整视图；用临时仓库验证三栏出现、
   diff 加载、暂存后计数、提交后状态清空且旧 diff 被清掉。
 - 测试必须隔离用户配置：`GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`，
@@ -287,8 +307,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
 
 已实现：仓库发现、porcelain v2 状态四组、多选暂存/取消暂存/全部、三种 diff、
 编辑器草稿、commit/amend、文件监听刷新、快捷键、空态和错误提示、单窗口多 tab、
-单实例启动与命令行转交。
+单实例启动与命令行转交、分支页的提交图与提交详情浏览。
 
-未实现（不要假装支持）：部分暂存（hunk/line）、历史/log、分支切换、stash、
+未实现（不要假装支持）：部分暂存（hunk/line）、分支切换、stash、
 merge/rebase/cherry-pick 操作、冲突 combined diff 的专用渲染、图片 diff、
 子模块操作、提交模板/签名/spellcheck、多窗口。

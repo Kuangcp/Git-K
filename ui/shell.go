@@ -53,12 +53,16 @@ func (a *root) topBar(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Height(46).PaddingX(14).Gap(2).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+		a.paneTab(c, "工作区", paneWorkspace)
+		a.paneTab(c, "分支", paneBranches)
 		ui.Text(c, "").Grow(1)
-		iconButtonDisabled(c, stageAllIcon, "全部暂存", a.keyTip("stageAll", "全部暂存"),
-			a.busy || a.status.Total() == 0, a.stageAll)
-		iconButtonDisabled(c, unstageAllIcon, "全部取消", "全部取消暂存",
-			a.busy || !a.status.HasStaged(), a.unstageAll)
-		toolbarDivider(c)
+		if a.pane == paneWorkspace {
+			iconButtonDisabled(c, stageAllIcon, "全部暂存", a.keyTip("stageAll", "全部暂存"),
+				a.busy || a.status.Total() == 0, a.stageAll)
+			iconButtonDisabled(c, unstageAllIcon, "全部取消", "全部取消暂存",
+				a.busy || !a.status.HasStaged(), a.unstageAll)
+			toolbarDivider(c)
+		}
 		load := iconButton(c, recentIcon, "加载仓库", "加载最近仓库", func() {
 			if a.loadOpen != nil {
 				*a.loadOpen = !*a.loadOpen
@@ -82,6 +86,30 @@ func (a *root) topBar(c *ui.Context) {
 	})
 }
 
+// paneTab is one of the workspace/branch tabs at the left of the top bar.
+func (a *root) paneTab(c *ui.Context, label string, k paneKind) {
+	t := c.Theme()
+	active := a.pane == k
+	b := ui.ButtonBase(c).Height(32).PaddingX(10).Radius(t.Radius).Label(label)
+	b.Children(func() {
+		txt := ui.Text(c, label).FontSize(13).SingleLine()
+		if active {
+			txt.TextColor(activeTabColor(t)).Bold()
+		} else {
+			txt.TextColor(t.TextMuted)
+		}
+	})
+	if active {
+		b = b.BorderWidth(0, 0, 2, 0).BorderColor(activeTabColor(t))
+	} else if b.Hovered() {
+		b = b.Background(t.SurfaceHover)
+	}
+	if b.Clicked() {
+		a.setPane(k)
+		c.Invalidate()
+	}
+}
+
 // keyTip is a toolbar tooltip with the action's current chord.
 func (a *root) keyTip(id, label string) string {
 	if s := a.keys.chordText(id); s != "" {
@@ -100,16 +128,25 @@ func (a *root) footer(c *ui.Context) {
 	ui.Row(c).Height(26).PaddingX(12).Gap(16).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
 		var hints []string
+		if a.pane == paneWorkspace {
+			for _, h := range [][2]string{
+				{"stage", "暂存"}, {"unstage", "取消暂存"}, {"stageAll", "全部暂存"},
+			} {
+				if s := a.keyHint(h[0], h[1]); s != "" {
+					hints = append(hints, s)
+				}
+			}
+			hints = append(hints, "双击行 切换暂存")
+		}
 		for _, h := range [][2]string{
-			{"stage", "暂存"}, {"unstage", "取消暂存"}, {"stageAll", "全部暂存"},
 			{"refresh", "刷新"}, {"pull", "拉取"}, {"push", "推送"},
+			{"workspace", "工作区"}, {"branches", "分支"},
 			{"minimize", "最小化"},
 		} {
 			if s := a.keyHint(h[0], h[1]); s != "" {
 				hints = append(hints, s)
 			}
 		}
-		hints = append(hints, "双击行 切换暂存")
 		ui.Text(c, strings.Join(hints, " · ")).
 			FontSize(11).TextColor(t.TextMuted).Grow(1)
 		branch := a.status.Branch

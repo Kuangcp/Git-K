@@ -44,6 +44,11 @@ var keyActions = []keyAction{
 	{ID: "prevTab", Label: "上一个标签", Scope: scopeWindow,
 		Def: []chord{{ui.Ctrl | ui.Shift, ui.KeyTab}}},
 
+	{ID: "workspace", Label: "切换工作区", Scope: scopeRepo,
+		Def: []chord{{ui.Ctrl, ui.Key1}}},
+	{ID: "branches", Label: "切换分支视图", Scope: scopeRepo,
+		Def: []chord{{ui.Ctrl, ui.Key2}}},
+
 	{ID: "stage", Label: "暂存选中", Scope: scopeRepo,
 		Def: []chord{{ui.Ctrl, ui.KeyS}}},
 	{ID: "stageAll", Label: "全部暂存", Scope: scopeRepo,

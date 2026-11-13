@@ -111,15 +111,22 @@ func (a *root) statusRow(c *ui.Context, i int) bool {
 		}
 	})
 	row.Children(func() {
-		ui.Text(c, string(e.row.Code)).Width(16).FontSize(12).Bold().
-			TextColor(codeColor(t, e.row.Group, e.row.Code))
-		ui.Text(c, gitx.DisplayPath(e.row.Path)).FontSize(13).SingleLine().Grow(1)
-		if e.row.OldPath != "" {
-			ui.Text(c, "← "+gitx.DisplayPath(e.row.OldPath)).FontSize(11).
-				TextColor(t.TextMuted).SingleLine()
-		}
+		fileRowContent(c, e.row.Code, e.row.Group, e.row.Path, e.row.OldPath)
 	})
 	return row.RowDoubleClicked()
+}
+
+// fileRowContent is the status letter, path and source path shared by the
+// workspace list and a commit's file list.
+func fileRowContent(c *ui.Context, code byte, group gitx.Group, path, oldPath string) {
+	t := c.Theme()
+	ui.Text(c, string(code)).Width(16).FontSize(12).Bold().
+		TextColor(codeColor(t, group, code))
+	ui.Text(c, gitx.DisplayPath(path)).FontSize(13).SingleLine().Grow(1)
+	if oldPath != "" {
+		ui.Text(c, "← "+gitx.DisplayPath(oldPath)).FontSize(11).
+			TextColor(t.TextMuted).SingleLine()
+	}
 }
 
 // toggleRow stages an unstaged row, or unstages a staged one. A file with

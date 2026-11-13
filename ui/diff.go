@@ -303,40 +303,50 @@ func (a *root) applyDiff(gen uint64, key, patch, path string, err error) {
 	a.diffPath = path
 	// Release the buffers of the view being replaced before taking the new
 	// patch, so switching files does not stack the two.
-	a.raw.Reset("")
-	a.diff = editor.DiffState{Layout: editor.DiffUnified, KeepScrollbars: true}
+	applyPatch(&a.diffMode, &a.diff, a.raw, &a.diffAdded, &a.diffDeleted, patch, err)
 	if err != nil {
-		a.diffMode = diffError
 		a.diffErr = err.Error()
+	}
+}
+
+// applyPatch installs a patch into a diff view, picking how to show it.
+// Both the workspace and the branch view use it, so a patch renders the
+// same way in either.
+func applyPatch(mode *diffMode, diff *editor.DiffState, raw *editor.Buffer, added, deleted *int, patch string, err error) {
+	*mode = diffNone
+	*added, *deleted = 0, 0
+	// Release the old buffers before taking the new one.
+	raw.Reset("")
+	*diff = editor.DiffState{Layout: editor.DiffUnified, KeepScrollbars: true}
+	if err != nil {
+		*mode = diffError
 		return
 	}
 	if patch == "" {
-		a.diffMode = diffEmpty
-		a.diffAdded, a.diffDeleted = 0, 0
+		*mode = diffEmpty
 		return
 	}
 	patches, perr := editor.ParsePatch(patch)
 	if perr != nil || len(patches) == 0 {
-		a.raw.Reset(patch)
-		a.diffMode = diffRaw
-		a.diffAdded, a.diffDeleted = countPatchLines(patch)
+		raw.Reset(patch)
+		*mode = diffRaw
+		*added, *deleted = countPatchLines(patch)
 		return
 	}
 	p := patches[0]
 	if p.Binary {
-		a.diffMode = diffBinary
-		a.diffAdded, a.diffDeleted = countPatchLines(patch)
+		*mode = diffBinary
+		*added, *deleted = countPatchLines(patch)
 		return
 	}
 	if len(p.Hunks) == 0 {
-		a.raw.Reset(patch)
-		a.diffMode = diffRaw
-		a.diffAdded, a.diffDeleted = 0, 0
+		raw.Reset(patch)
+		*mode = diffRaw
 		return
 	}
-	a.diff.SetPatch(p)
-	a.diffMode = diffPatch
-	a.diffAdded, a.diffDeleted = a.diff.Stats()
+	diff.SetPatch(p)
+	*mode = diffPatch
+	*added, *deleted = diff.Stats()
 }
 
 // countPatchLines counts added and removed lines for a patch the viewer

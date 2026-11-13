@@ -63,6 +63,9 @@ type root struct {
 	draftSeq  atomic.Uint64
 	draftTxt  string
 
+	pane   paneKind
+	branch branchState
+
 	diff        editor.DiffState
 	diffKey     string
 	diffPath    string
@@ -76,11 +79,13 @@ type root struct {
 	raw     *editor.Buffer
 	rawView editor.State
 
-	sidePercent   float32
-	commitPercent float32
-	settings      *settings.Store
-	savedLayout   settings.Layout
-	deferStatus   bool
+	sidePercent         float32
+	commitPercent       float32
+	branchGraphPercent  float32
+	branchDetailPercent float32
+	settings            *settings.Store
+	savedLayout         settings.Layout
+	deferStatus         bool
 
 	statusGen uint64
 	diffGen   uint64
@@ -116,10 +121,13 @@ func NewRootLazy(dir string, st *settings.Store) *root {
 
 func newRoot(dir string, st *settings.Store, lazy bool) *root {
 	a := &root{
-		sidePercent:   48,
-		commitPercent: 44,
-		cur:           -1,
-		settings:      st,
+		sidePercent:         48,
+		commitPercent:       44,
+		branchGraphPercent:  38,
+		branchDetailPercent: 52,
+		cur:                 -1,
+		branch:              newBranchState(),
+		settings:            st,
 	}
 	a.loadLayout()
 	a.body = editor.NewBuffer("")
@@ -174,28 +182,34 @@ func (a *root) View(c *ui.Context) {
 	}
 	// 帧首同步 diff：DiffState 被视图元素按指针引用，构建后再重置会让
 	// 正在绘制的编辑器读到零值。
-	a.syncDiff()
 	curBefore := a.cur
+	if a.pane == paneWorkspace {
+		a.syncDiff()
+	}
 	ui.Column(c).Fill().Children(func() {
 		a.topBar(c)
-		ui.SplitPercent(c, &a.sidePercent, func() {
-			// 左列：提交信息在上，差异在下；右列是状态。
-			ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
-				ui.SplitVerticalPercent(c, &a.commitPercent, func() {
-					a.commitPane(c)
-				}, func() {
-					a.diffPane(c)
-				}).Fill()
-			})
-		}, func() {
-			a.statusPane(c)
-		}).Fill()
+		if a.pane == paneBranches {
+			a.branchPane(c)
+		} else {
+			ui.SplitPercent(c, &a.sidePercent, func() {
+				// 左列：提交信息在上，差异在下；右列是状态。
+				ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+					ui.SplitVerticalPercent(c, &a.commitPercent, func() {
+						a.commitPane(c)
+					}, func() {
+						a.diffPane(c)
+					}).Fill()
+				})
+			}, func() {
+				a.statusPane(c)
+			}).Fill()
+		}
 		a.footer(c)
 	})
 	a.deleteDialog(c)
 	a.revertDialog(c)
 	a.shortcuts(c)
-	if a.cur != curBefore {
+	if a.pane == paneWorkspace && a.cur != curBefore {
 		// 点击选中的新行在本帧才写入 cur，下一帧再同步 diff。
 		c.Invalidate()
 	}
@@ -208,7 +222,12 @@ func (a *root) saveLayout() {
 	if a.settings == nil {
 		return
 	}
-	l := settings.Layout{SidePercent: clampPercent(a.sidePercent), CommitPercent: clampPercent(a.commitPercent)}
+	l := settings.Layout{
+		SidePercent:         clampPercent(a.sidePercent),
+		CommitPercent:       clampPercent(a.commitPercent),
+		BranchGraphPercent:  clampPercent(a.branchGraphPercent),
+		BranchDetailPercent: clampPercent(a.branchDetailPercent),
+	}
 	if l == a.savedLayout {
 		return
 	}
@@ -259,6 +278,8 @@ func (a *root) loadLayout() {
 	l := a.settings.Config().Layout
 	a.sidePercent = layoutPercent(l.SidePercent, a.sidePercent)
 	a.commitPercent = layoutPercent(l.CommitPercent, a.commitPercent)
+	a.branchGraphPercent = layoutPercent(l.BranchGraphPercent, a.branchGraphPercent)
+	a.branchDetailPercent = layoutPercent(l.BranchDetailPercent, a.branchDetailPercent)
 	a.savedLayout = l
 }
 
@@ -290,6 +311,7 @@ func (a *root) openRepo(dir string) {
 	a.groupFiles = nil
 	a.groupStat.Reset("")
 	a.groupPrevCur = -1
+	a.resetBranch()
 	a.deletePaths = nil
 	a.deleteAsk = false
 	a.revertPaths = nil

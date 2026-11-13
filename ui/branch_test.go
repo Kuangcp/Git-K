@@ -1,0 +1,94 @@
+package ui
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+
+	"git-k/app/gitx"
+)
+
+// The branch tab loads the graph, shows the first commit's files, and
+// renders a file's diff with the shared diff body.
+func TestBranchPane(t *testing.T) {
+	dir := newRepo(t)
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "first")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\nsecond\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	tt := ui.NewTester(r.View, 1200, 800)
+	tt.Frame()
+	for _, want := range []string{"工作区", "分支"} {
+		if !tt.HasText(want) {
+			t.Fatalf("top bar missing %q: %v", want, tt.Texts())
+		}
+	}
+
+	tt.Key(ui.Ctrl, ui.Key2)
+	tt.Frame()
+	if r.pane != paneBranches {
+		t.Fatal("Ctrl+2 did not open the branch pane")
+	}
+	if len(r.branch.commits) != 1 || r.branch.commits[0].Subject != "first" {
+		t.Fatalf("commits: %+v", r.branch.commits)
+	}
+	if r.branch.main != "main" || !containsString(r.branch.branches, "main") {
+		t.Fatalf("main line: %q branches=%v", r.branch.main, r.branch.branches)
+	}
+	if len(r.branch.files) != 1 || r.branch.files[0].path != "a.txt" {
+		t.Fatalf("files: %+v", r.branch.files)
+	}
+	for _, want := range []string{"提交图", "first", "a.txt"} {
+		if !tt.HasText(want) {
+			t.Fatalf("branch pane missing %q: %v", want, tt.Texts())
+		}
+	}
+	if tt.HasText("全部暂存") {
+		t.Fatalf("workspace staging action shown in branch pane: %v", tt.Texts())
+	}
+
+	r.selectCommitFile(0)
+	tt.Frame()
+	if r.branch.mode != diffPatch || r.branch.diffAdded == 0 {
+		t.Fatalf("commit diff: mode=%v added=%d", r.branch.mode, r.branch.diffAdded)
+	}
+
+	tt.Key(ui.Ctrl, ui.Key1)
+	tt.Frame()
+	if r.pane != paneWorkspace || !tt.HasText("提交摘要") {
+		t.Fatalf("Ctrl+1 did not return to the workspace")
+	}
+}
+
+// layoutGraph puts a merge's parents in lanes below the merge.
+func TestLayoutGraph(t *testing.T) {
+	commits := []gitx.Commit{
+		{Hash: "c3", Parents: []string{"c1", "c2"}},
+		{Hash: "c2", Parents: []string{"c1"}},
+		{Hash: "c1"},
+	}
+	rows := layoutGraph(commits)
+	if len(rows) != 3 {
+		t.Fatalf("rows: %d", len(rows))
+	}
+	if rows[0].col != 0 || len(rows[0].after) != 2 {
+		t.Fatalf("merge row: %+v", rows[0])
+	}
+	if len(rows[0].edges) != 2 || rows[0].edges[0] != 0 || rows[0].edges[1] != 1 {
+		t.Fatalf("merge edges: %+v", rows[0].edges)
+	}
+	if len(rows[0].afterNew) != 2 || rows[0].afterNew[0] || !rows[0].afterNew[1] {
+		t.Fatalf("merge new lanes: %+v", rows[0].afterNew)
+	}
+	if rows[1].afterNew[0] {
+		t.Fatalf("existing lane marked new: %+v", rows[1].afterNew)
+	}
+	if len(rows[2].after) != 0 {
+		t.Fatalf("root should close its lane: %+v", rows[2])
+	}
+}

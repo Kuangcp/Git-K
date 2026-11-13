@@ -15,10 +15,22 @@ func (a *root) shortcuts(c *ui.Context) {
 		return
 	}
 	for _, act := range keyActions {
-		if act.Scope != scopeRepo || !a.keys.hit(c, act.ID) {
+		if act.Scope != scopeRepo {
+			continue
+		}
+		if a.pane != paneWorkspace && workspaceOnly(act.ID) {
+			continue
+		}
+		if !a.keys.hit(c, act.ID) {
 			continue
 		}
 		switch act.ID {
+		case "workspace":
+			a.setPane(paneWorkspace)
+			c.Invalidate()
+		case "branches":
+			a.setPane(paneBranches)
+			c.Invalidate()
 		case "stage":
 			a.stageSelected()
 		case "stageAll":
@@ -27,6 +39,9 @@ func (a *root) shortcuts(c *ui.Context) {
 			a.unstageSelected()
 		case "refresh":
 			a.refreshStatus()
+			if a.pane == paneBranches {
+				a.loadLog()
+			}
 		case "amend":
 			a.loadAmend()
 		case "push":
@@ -38,6 +53,16 @@ func (a *root) shortcuts(c *ui.Context) {
 		}
 		return
 	}
+}
+
+// workspaceOnly reports actions that change the index or commit and so
+// only apply to the workspace tab.
+func workspaceOnly(id string) bool {
+	switch id {
+	case "stage", "stageAll", "unstage", "amend", "commit":
+		return true
+	}
+	return false
 }
 
 // chooseRepo asks for a directory and opens it.
