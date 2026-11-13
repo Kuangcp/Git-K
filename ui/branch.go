@@ -39,6 +39,9 @@ type graphRow struct {
 	// afterNew marks lanes that this commit created below it; their line
 	// starts where a merge curve reaches the row's bottom.
 	afterNew []bool
+	// merge is true for a commit with more than one parent, drawn as a
+	// diamond.
+	merge bool
 }
 
 // branchState is the branch tab's history, selection and diff cache.
@@ -496,7 +499,16 @@ func drawLanes(p *ui.Painter, r ui.Rect, g graphRow, t *ui.Theme) {
 		p.StrokePath(&path, 1.5, laneColor(t, j))
 	}
 	if g.col < maxLanes {
-		p.Fill(ui.Rect{X: dotX - 3, Y: mid - 3, W: 6, H: 6}, laneColor(t, g.col), 3)
+		c := laneColor(t, g.col)
+		if g.merge {
+			const r = 4.5
+			var d ui.Path
+			d.MoveTo(dotX, mid-r).LineTo(dotX+r, mid).LineTo(dotX, mid+r).
+				LineTo(dotX-r, mid).Close()
+			p.FillPath(&d, c)
+		} else {
+			p.Fill(ui.Rect{X: dotX - 3, Y: mid - 3, W: 6, H: 6}, c, 3)
+		}
 	}
 }
 
@@ -554,7 +566,10 @@ func layoutGraph(commits []gitx.Commit) []graphRow {
 				edges = append(edges, j)
 			}
 		}
-		rows[i] = graphRow{col: col, before: before, after: after, edges: edges, afterNew: afterNew}
+		rows[i] = graphRow{
+			col: col, before: before, after: after, edges: edges,
+			afterNew: afterNew, merge: len(c.Parents) > 1,
+		}
 	}
 	return rows
 }

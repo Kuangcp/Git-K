@@ -85,6 +85,9 @@ func TestLayoutGraph(t *testing.T) {
 	if len(rows[0].afterNew) != 2 || rows[0].afterNew[0] || !rows[0].afterNew[1] {
 		t.Fatalf("merge new lanes: %+v", rows[0].afterNew)
 	}
+	if !rows[0].merge || rows[1].merge {
+		t.Fatalf("merge flags: %v %v", rows[0].merge, rows[1].merge)
+	}
 	if rows[1].afterNew[0] {
 		t.Fatalf("existing lane marked new: %+v", rows[1].afterNew)
 	}
