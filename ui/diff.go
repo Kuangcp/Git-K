@@ -194,7 +194,9 @@ func groupFileFromPatch(path, patch string, err error) (groupFileDiff, *fileStat
 		switch {
 		case perr == nil && len(patches) > 0 && !patches[0].Binary && len(patches[0].Hunks) > 0:
 			f.mode = diffPatch
-			f.diff = editor.DiffState{Layout: editor.DiffUnified, FitContent: true}
+			f.diff = editor.DiffState{
+				Layout: editor.DiffUnified, FitContent: true, NoScrollbars: true,
+			}
 			f.diff.SetPatch(patches[0])
 			add, del := f.diff.Stats()
 			st = &fileStat{path: path, added: add, deleted: del}
@@ -207,12 +209,13 @@ func groupFileFromPatch(path, patch string, err error) (groupFileDiff, *fileStat
 	}
 	if f.raw != nil {
 		f.view = editor.State{
-			Buffer:      f.raw,
-			ReadOnly:    true,
-			SoftWrap:    true,
-			LineNumbers: editor.LineNumbersOn,
-			NoFolding:   true,
-			FitContent:  true,
+			Buffer:       f.raw,
+			ReadOnly:     true,
+			SoftWrap:     true,
+			LineNumbers:  editor.LineNumbersOn,
+			NoFolding:    true,
+			FitContent:   true,
+			NoScrollbars: true,
 		}
 	}
 	return f, st, true
