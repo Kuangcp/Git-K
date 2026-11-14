@@ -9,7 +9,7 @@ git-k 是一个用 Go 写原生界面的 Git 客户端：交互骨架对齐 git-
 - **无 WebView**：窗口内容是 `mygo.NewWindow(WindowOptions{Content: ui.View(...)})`，
   不加载 HTML/JS。不要给 `mygo.json` 打开 webview。
 - **无边框窗口**：主窗口 `Frameless: true`，由 `ui/titlebar.go` 自绘 32px 标题栏：
-  `DragWindow` 拖动/双击最大化；正中间显示当前 tab 的仓库名；左侧图标，右侧是设置、
+  `DragWindow` 拖动/双击最大化；正中间显示当前 tab 的仓库名；左侧图标和应用名 Git-K，右侧是设置、
   最小化、最大化/还原、关闭。不要再依赖系统标题栏；home 与仓库页共用同一条标题栏。
 - **Go 1.27.3 / mygo v0.8.3**：`go.mod` 固定 mygo 版本，和 `db-g` 一致。升级前先跑
   `go test ./...` 和一次真实窗口冒烟。
@@ -246,9 +246,12 @@ main.go ──> ui.App / ui.root ──> app/gitx
   commit/diff/status 三栏；分支 tab 左栏是提交图，右栏上下分为提交详情+文件列表和
   文件 diff。两个 split 比例存 `Layout.BranchGraphPercent` / `BranchDetailPercent`，
   与工作区比例互不影响。切换 tab 时重新读 log，但保留仍存在的选中提交。
-- 分支页复用工作区的差异渲染（`diffRender` / `showDiffBody`）和文件行
-  （`fileRowContent`）；提交详情、文件列表、diff 的选择状态各自放在 `root.branch`。
-  提交 diff 一律对第一父提交计算，避免 combined diff；补丁超限仍回退只读原文。
+- 分支页复用工作区的差异渲染（`diffRender` / `showDiffBody`、`groupDiffPane`）和
+  文件行（`fileRowContent`）；提交详情、文件列表、diff 的选择状态各自放在
+  `root.branch`。默认选中「修改的文件」头，堆叠展示全部文件补丁；点单个文件再切到
+  该文件 diff。提交 diff 一律对第一父提交计算，避免 combined diff；补丁超限仍回退
+  只读原文。提交行显示指向它的本地分支/tag 标记（HEAD 当前分支高亮），选中行用
+  淡色背景；右键可复制完整 Commit ID。
 - `Ctrl+Q` 最小化窗口，不退出应用（`App.minimizeWindow`，测试里替换
   `app.minimize` 钩子）。窗口级动作（最小化/关闭 tab/切 tab）在 `App.shortcuts`
   分发，仓库级动作在 `root.shortcuts` 分发。

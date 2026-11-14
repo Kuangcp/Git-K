@@ -19,11 +19,12 @@ func (a *App) titleBar(c *ui.Context) {
 	bar := ui.Row(c).Height(32).FillWidth().Padding(0, 8).Gap(2).
 		AlignItems(ui.Center).DragWindow().Background(t.Surface)
 	bar.Children(func() {
-		left := ui.Row(c).Width(side).AlignItems(ui.Center)
+		left := ui.Row(c).Width(side).Gap(6).AlignItems(ui.Center)
 		left.Children(func() {
 			if a.icon != nil {
 				ui.Image(c, a.icon).Width(16).Height(16)
 			}
+			ui.Text(c, "Git-K").FontSize(13).Bold().SingleLine()
 		})
 		ui.Text(c, a.activeName()).FontSize(24).TextAlign(ui.Center).
 			SingleLine().Grow(1)
