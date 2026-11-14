@@ -43,10 +43,14 @@ func TestBranchPane(t *testing.T) {
 	if len(r.branch.files) != 1 || r.branch.files[0].path != "a.txt" {
 		t.Fatalf("files: %+v", r.branch.files)
 	}
-	for _, want := range []string{"提交图", "first", "a.txt"} {
+	for _, want := range []string{"提交图", "first", "a.txt", "修改的文件 1"} {
 		if !tt.HasText(want) {
 			t.Fatalf("branch pane missing %q: %v", want, tt.Texts())
 		}
+	}
+	if r.branch.fileSel != -1 || len(r.branch.groupFiles) != 1 || r.branch.groupAdded == 0 {
+		t.Fatalf("default stacked diff: sel=%d files=%d added=%d",
+			r.branch.fileSel, len(r.branch.groupFiles), r.branch.groupAdded)
 	}
 	if tt.HasText("全部暂存") {
 		t.Fatalf("workspace staging action shown in branch pane: %v", tt.Texts())
@@ -54,8 +58,15 @@ func TestBranchPane(t *testing.T) {
 
 	r.selectCommitFile(0)
 	tt.Frame()
-	if r.branch.mode != diffPatch || r.branch.diffAdded == 0 {
-		t.Fatalf("commit diff: mode=%v added=%d", r.branch.mode, r.branch.diffAdded)
+	if r.branch.fileSel != 0 || r.branch.mode != diffPatch || r.branch.diffAdded == 0 {
+		t.Fatalf("commit diff: sel=%d mode=%v added=%d",
+			r.branch.fileSel, r.branch.mode, r.branch.diffAdded)
+	}
+	r.selectCommitGroup()
+	tt.Frame()
+	if r.branch.fileSel != -1 || len(r.branch.groupFiles) != 1 {
+		t.Fatalf("back to stacked diff: sel=%d files=%d",
+			r.branch.fileSel, len(r.branch.groupFiles))
 	}
 
 	tt.Key(ui.Ctrl, ui.Key1)
@@ -93,5 +104,22 @@ func TestLayoutGraph(t *testing.T) {
 	}
 	if len(rows[2].after) != 0 {
 		t.Fatalf("root should close its lane: %+v", rows[2])
+	}
+}
+
+// Refs split into chips, with HEAD's branch marked as current.
+func TestParseRefs(t *testing.T) {
+	chips := parseRefs("HEAD -> main, tag: v1, dev")
+	if len(chips) != 3 {
+		t.Fatalf("chips: %+v", chips)
+	}
+	if chips[0].name != "main" || !chips[0].current {
+		t.Fatalf("head chip: %+v", chips[0])
+	}
+	if chips[1].name != "v1" || !chips[1].tag {
+		t.Fatalf("tag chip: %+v", chips[1])
+	}
+	if chips[2].name != "dev" || chips[2].current || chips[2].tag {
+		t.Fatalf("branch chip: %+v", chips[2])
 	}
 }

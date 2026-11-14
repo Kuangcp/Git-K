@@ -175,6 +175,12 @@ func loadGroupFile(ctx context.Context, repo *gitx.Repo, row gitx.Row) (groupFil
 	if path == "" {
 		path = row.Path
 	}
+	return groupFileFromPatch(path, patch, err)
+}
+
+// groupFileFromPatch builds one file of a stacked diff, whether the
+// patch came from the workspace or a commit.
+func groupFileFromPatch(path, patch string, err error) (groupFileDiff, *fileStat, bool) {
 	f := groupFileDiff{path: path}
 	var st *fileStat
 	switch {

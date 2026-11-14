@@ -121,14 +121,19 @@ func showDiffBody(c *ui.Context, d diffRender) {
 // groupDiffPane stacks the group's diffstat and each file's diff, which
 // keep the single-file view's colors.
 func (a *root) groupDiffPane(c *ui.Context) {
+	groupDiffPane(c, a.groupFiles, a.groupStat, &a.groupStatView)
+}
+
+// groupDiffPane stacks a group's diffstat and each file's diff.
+func groupDiffPane(c *ui.Context, files []groupFileDiff, stat *editor.Buffer, statView *editor.State) {
 	t := c.Theme()
 	ui.Scroll(c).Fill().Children(func() {
 		ui.Column(c).FillWidth().Padding(12).Gap(10).Children(func() {
-			if a.groupStat.LineCount() > 0 {
-				editor.View(c, &a.groupStatView).FillWidth()
+			if stat.LineCount() > 0 {
+				editor.View(c, statView).FillWidth()
 			}
-			for i := range a.groupFiles {
-				f := &a.groupFiles[i]
+			for i := range files {
+				f := &files[i]
 				ui.Text(c, gitx.DisplayPath(f.path)).FontSize(12).Bold().SingleLine()
 				switch f.mode {
 				case diffPatch:

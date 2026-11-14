@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
@@ -66,6 +68,14 @@ type branchState struct {
 	fileSel      int
 	fileList     ui.ListState
 
+	groupFiles    []groupFileDiff
+	groupStat     *editor.Buffer
+	groupStatView editor.State
+	groupLoading  bool
+	groupAdded    int
+	groupDeleted  int
+	groupKey      string
+
 	diff        editor.DiffState
 	raw         *editor.Buffer
 	rawView     editor.State
@@ -80,6 +90,7 @@ type branchState struct {
 	logGen    uint64
 	detailGen uint64
 	diffGen   uint64
+	groupGen  uint64
 }
 
 func newBranchState() branchState {
@@ -103,6 +114,14 @@ func newBranchState() branchState {
 		FitContent:  true,
 	}
 	b.diff = editor.DiffState{Layout: editor.DiffUnified, KeepScrollbars: true}
+	b.groupStat = editor.NewBuffer("")
+	b.groupStatView = editor.State{
+		Buffer:      b.groupStat,
+		ReadOnly:    true,
+		LineNumbers: editor.LineNumbersOff,
+		NoFolding:   true,
+		FitContent:  true,
+	}
 	return b
 }
 
@@ -288,11 +307,20 @@ func (a *root) applyCommit(gen uint64, hash, msg string, files []gitx.CommitFile
 	for i, f := range files {
 		b.files[i] = commitFile{code: f.Code, path: f.Path, oldPath: f.OldPath}
 	}
+	// The stack of all files is the default view, as the workspace's
+	// group row is.
+	b.fileSel = -1
+	if len(b.files) > 0 {
+		a.selectCommitGroup()
+	} else {
+		a.resetCommitGroup()
+	}
 }
 
 // resetCommit clears the commit detail and its diff.
 func (a *root) resetCommit() {
 	b := &a.branch
+	a.resetCommitGroup()
 	b.hash = ""
 	b.detailGen++
 	b.body = ""
@@ -302,6 +330,108 @@ func (a *root) resetCommit() {
 	b.filesLoading = false
 	b.fileSel = -1
 	a.resetCommitDiff()
+}
+
+// selectCommitGroup shows every changed file's diff stacked, like the
+// workspace's group row. The result is cached per commit.
+func (a *root) selectCommitGroup() {
+	b := &a.branch
+	b.fileSel = -1
+	if b.sel < 0 || b.sel >= len(b.commits) || len(b.files) == 0 {
+		a.resetCommitGroup()
+		return
+	}
+	c := b.commits[b.sel]
+	if c.Hash == b.groupKey {
+		return
+	}
+	b.groupKey = c.Hash
+	b.groupGen++
+	gen := b.groupGen
+	b.groupLoading = true
+	b.groupFiles = nil
+	b.groupAdded, b.groupDeleted = 0, 0
+	b.groupStat.Reset("")
+	parent := ""
+	if len(c.Parents) > 0 {
+		parent = c.Parents[0]
+	}
+	files := append([]commitFile(nil), b.files...)
+	repo := a.repo
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	if a.win == nil {
+		loaded, stat, added, deleted := loadCommitGroup(ctx, repo, c.Hash, parent, files)
+		cancel()
+		a.applyCommitGroup(gen, c.Hash, loaded, stat, added, deleted)
+		return
+	}
+	go func() {
+		defer cancel()
+		loaded, stat, added, deleted := loadCommitGroup(ctx, repo, c.Hash, parent, files)
+		a.win.Update(func() {
+			a.applyCommitGroup(gen, c.Hash, loaded, stat, added, deleted)
+		})
+	}()
+}
+
+func (a *root) applyCommitGroup(gen uint64, key string, files []groupFileDiff, stat string, added, deleted int) {
+	b := &a.branch
+	if gen != b.groupGen || key != b.groupKey {
+		return
+	}
+	b.groupLoading = false
+	b.groupFiles = files
+	b.groupStat.Reset(stat)
+	b.groupAdded, b.groupDeleted = added, deleted
+}
+
+func (a *root) resetCommitGroup() {
+	b := &a.branch
+	b.groupGen++
+	b.groupKey = ""
+	b.groupLoading = false
+	b.groupFiles = nil
+	b.groupAdded, b.groupDeleted = 0, 0
+	b.groupStat.Reset("")
+}
+
+// loadCommitGroup loads each changed file's patch at once for the stacked
+// view, a few git processes at a time.
+func loadCommitGroup(ctx context.Context, repo *gitx.Repo, hash, parent string, files []commitFile) (out []groupFileDiff, stat string, added, deleted int) {
+	type result struct {
+		file groupFileDiff
+		stat *fileStat
+	}
+	results := make([]result, len(files))
+	sem := make(chan struct{}, min(4, len(files)))
+	var wg sync.WaitGroup
+	for i, f := range files {
+		wg.Add(1)
+		go func(i int, path string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			patch, err := repo.CommitDiff(ctx, hash, parent, path)
+			file, st, ok := groupFileFromPatch(path, patch, err)
+			if ok {
+				results[i] = result{file: file, stat: st}
+			}
+		}(i, f.path)
+	}
+	wg.Wait()
+	var stats []fileStat
+	for _, r := range results {
+		if r.file.path == "" && r.file.mode == diffNone {
+			continue
+		}
+		out = append(out, r.file)
+		if r.stat != nil {
+			stats = append(stats, *r.stat)
+			added += r.stat.added
+			deleted += r.stat.deleted
+		}
+	}
+	return out, formatDiffStat(stats), added, deleted
 }
 
 // commitBody drops the subject line, which the header already shows.
@@ -425,15 +555,11 @@ func (a *root) commitGraph(c *ui.Context) {
 		case len(b.commits) == 0:
 			ui.Text(c, "没有可显示的提交").FontSize(12).TextColor(t.TextMuted).Padding(12)
 		default:
-			b.list.Selected = &b.sel
 			b.list.Key = func(i int) any { return b.commits[i].Hash }
 			b.list.Label = func(i int) string { return b.commits[i].Subject }
-			list := ui.List(c, &b.list, len(b.commits), func(i int) {
+			ui.List(c, &b.list, len(b.commits), func(i int) {
 				a.graphRow(c, i)
 			}).Grow(1).Padding(0, 4)
-			if list.Changed() {
-				a.selectCommit(b.sel)
-			}
 		}
 	})
 }
@@ -442,17 +568,86 @@ func (a *root) graphRow(c *ui.Context, i int) {
 	t := c.Theme()
 	b := &a.branch
 	cm := b.commits[i]
-	row := ui.Row(c).Height(30).PaddingX(8).Gap(8).AlignItems(ui.Center)
+	row := ui.ButtonBase(c).FillWidth().Height(30).PaddingX(8).Gap(8).
+		AlignItems(ui.Center).Label(cm.Subject)
+	row.ContextMenu(func(m *ui.Menu) {
+		if m.Item("复制 Commit ID").Chosen() {
+			mygo.Clipboard.WriteText(cm.Hash)
+		}
+	})
 	row.Children(func() {
 		ui.Box(c).Width(graphWidth()).Height(30).Clip().
 			Draw(func(p *ui.Painter, r ui.Rect) { drawLanes(p, r, b.graph[i], t) })
+		refChips(c, cm.Refs, t)
 		ui.Text(c, cm.Subject).FontSize(12).SingleLine().Grow(1)
-		if cm.Refs != "" {
-			ui.Text(c, refLabel(cm.Refs)).FontSize(10).TextColor(t.Accent).SingleLine().
-				MaxWidth(120).Tooltip(cm.Refs)
-		}
 		ui.Text(c, shortHash(cm.Hash)).FontSize(10).TextColor(t.TextMuted)
 	})
+	switch {
+	case i == b.sel:
+		row = row.Background(t.Accent.Alpha(0.14)).Radius(t.Radius)
+	case row.Hovered():
+		row = row.Background(t.SurfaceHover).Radius(t.Radius)
+	}
+	if row.Clicked() {
+		b.sel = i
+		a.selectCommit(i)
+		c.Invalidate()
+	}
+}
+
+// refChip is one branch or tag pointing at a commit.
+type refChip struct {
+	name    string
+	tag     bool
+	current bool
+}
+
+// refChips marks the commit's refs before its subject; at most two chips
+// show, with the rest counted.
+func refChips(c *ui.Context, refs string, t *ui.Theme) {
+	chips := parseRefs(refs)
+	for i, chip := range chips {
+		if i == 2 {
+			ui.Text(c, fmt.Sprintf("+%d", len(chips)-2)).FontSize(9).
+				TextColor(t.TextMuted).Padding(1, 3)
+			break
+		}
+		txt := ui.Text(c, chip.name).FontSize(9).Padding(1, 4).Radius(3).
+			SingleLine().MaxWidth(90).Tooltip(chip.name)
+		switch {
+		case chip.current:
+			txt.Background(t.Accent.Alpha(0.22)).TextColor(t.Accent).Bold()
+		case chip.tag:
+			txt.Background(t.SurfaceHover).TextColor(t.TextMuted)
+		default:
+			txt.Background(t.Accent.Alpha(0.14)).TextColor(t.Text)
+		}
+	}
+}
+
+// parseRefs splits git's %D decoration into chips, marking HEAD's branch.
+func parseRefs(refs string) []refChip {
+	var out []refChip
+	for _, r := range strings.Split(refs, ",") {
+		r = strings.TrimSpace(r)
+		if r == "" || r == "HEAD" {
+			continue
+		}
+		chip := refChip{}
+		if strings.HasPrefix(r, "HEAD -> ") {
+			chip.current = true
+			r = strings.TrimPrefix(r, "HEAD -> ")
+		}
+		if strings.HasPrefix(r, "tag: ") {
+			chip.tag = true
+			r = strings.TrimPrefix(r, "tag: ")
+		}
+		if r != "" {
+			chip.name = r
+			out = append(out, chip)
+		}
+	}
+	return out
 }
 
 // graphWidth leaves room for the lane lines and a little air.
@@ -501,7 +696,7 @@ func drawLanes(p *ui.Painter, r ui.Rect, g graphRow, t *ui.Theme) {
 	if g.col < maxLanes {
 		c := laneColor(t, g.col)
 		if g.merge {
-			const r = 4.5
+			const r = 6.5
 			var d ui.Path
 			d.MoveTo(dotX, mid-r).LineTo(dotX+r, mid).LineTo(dotX, mid+r).
 				LineTo(dotX-r, mid).Close()
@@ -659,11 +854,19 @@ func (a *root) commitDetail(c *ui.Context) {
 				editor.View(c, &b.msgView).FillWidth().Padding(6, 12)
 			})
 		}
-		ui.Row(c).Height(28).PaddingX(12).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "修改的文件").FontSize(11).Bold().TextColor(t.TextMuted)
-			ui.Text(c, fmt.Sprintf("%d", len(b.files))).FontSize(11).
-				TextColor(t.TextMuted).PaddingStart(6)
-		})
+		groupMode := b.fileSel < 0 && len(b.files) > 0
+		header := ui.Button(c, fmt.Sprintf("修改的文件 %d", len(b.files))).
+			Fill().Height(28).PaddingX(12).Justify(ui.Start).TextAlign(ui.Start).
+			FontSize(11).Bold().BorderWidth(0).Radius(0)
+		if groupMode {
+			header = header.Background(t.SurfaceHover).TextColor(t.Accent)
+		} else {
+			header = header.Background(t.Surface).TextColor(t.TextMuted)
+		}
+		if header.Clicked() {
+			a.selectCommitGroup()
+			c.Invalidate()
+		}
 		switch {
 		case b.filesErr != "":
 			ui.Text(c, b.filesErr).FontSize(11).TextColor(t.Danger).Padding(12).
@@ -698,24 +901,49 @@ func (a *root) commitFileRow(c *ui.Context, i int) {
 func (a *root) commitDiffPane(c *ui.Context) {
 	t := c.Theme()
 	b := &a.branch
+	groupMode := b.fileSel < 0 && len(b.files) > 0
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
-			if b.diffPath != "" {
+			added, deleted, loading := b.diffAdded, b.diffDeleted, b.diffLoading
+			switch {
+			case groupMode:
+				ui.Text(c, fmt.Sprintf("%d 个文件", len(b.files))).FontSize(12).Bold()
+				added, deleted, loading = b.groupAdded, b.groupDeleted, b.groupLoading
+			case b.diffPath != "":
 				ui.Text(c, gitx.DisplayPath(b.diffPath)).FontSize(12).Bold().SingleLine()
 			}
-			if b.diffAdded > 0 {
-				ui.Text(c, fmt.Sprintf("+%d", b.diffAdded)).FontSize(11).TextColor(t.Success)
+			if added > 0 {
+				ui.Text(c, fmt.Sprintf("+%d", added)).FontSize(11).TextColor(t.Success)
 			}
-			if b.diffDeleted > 0 {
-				ui.Text(c, fmt.Sprintf("−%d", b.diffDeleted)).FontSize(11).TextColor(t.Danger)
+			if deleted > 0 {
+				ui.Text(c, fmt.Sprintf("−%d", deleted)).FontSize(11).TextColor(t.Danger)
 			}
 			ui.Text(c, "").Grow(1)
-			if b.diffLoading {
+			if loading {
 				ui.Text(c, "读取中…").FontSize(11).TextColor(t.TextMuted)
 			}
 		})
+		if groupMode {
+			switch {
+			case b.groupLoading:
+				ui.Column(c).Fill().Center().Children(func() {
+					ui.Text(c, "正在读取差异…").FontSize(12).TextColor(t.TextMuted)
+				})
+			case len(b.groupFiles) == 0:
+				ui.Column(c).Fill().Center().Children(func() {
+					ui.Text(c, "没有可显示的差异").FontSize(12).TextColor(t.TextMuted)
+				})
+			default:
+				groupDiffPane(c, b.groupFiles, b.groupStat, &b.groupStatView)
+			}
+			return
+		}
+		idle := "选择一个文件查看差异"
+		if len(b.files) == 0 {
+			idle = "没有文件变更"
+		}
 		showDiffBody(c, diffRender{
 			state:    &b.diff,
 			rawView:  &b.rawView,
@@ -723,8 +951,9 @@ func (a *root) commitDiffPane(c *ui.Context) {
 			err:      b.diffErr,
 			added:    b.diffAdded,
 			deleted:  b.diffDeleted,
-			loading:  b.diffLoading,
+			loading:  b.diffLoading || b.filesLoading,
 			empty:    "没有可显示的差异",
+			idle:     idle,
 			selected: b.diffPath != "",
 		})
 	})
