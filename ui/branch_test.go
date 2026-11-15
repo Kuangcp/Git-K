@@ -123,3 +123,12 @@ func TestParseRefs(t *testing.T) {
 		t.Fatalf("branch chip: %+v", chips[2])
 	}
 }
+
+func TestCommitIDCopyLength(t *testing.T) {
+	if got := commitID("0123456789abcdef"); got != "0123456" {
+		t.Fatalf("commitID = %q", got)
+	}
+	if got := commitID("abc"); got != "abc" {
+		t.Fatalf("short commitID = %q", got)
+	}
+}

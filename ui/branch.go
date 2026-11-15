@@ -572,7 +572,7 @@ func (a *root) graphRow(c *ui.Context, i int) {
 		AlignItems(ui.Center).Label(cm.Subject)
 	row.ContextMenu(func(m *ui.Menu) {
 		if m.Item("复制 Commit ID").Chosen() {
-			mygo.Clipboard.WriteText(cm.Hash)
+			mygo.Clipboard.WriteText(commitID(cm.Hash))
 		}
 	})
 	row.Children(func() {
@@ -799,6 +799,15 @@ func indexGraphLane(lanes []graphLane, hash string) int {
 		}
 	}
 	return -1
+}
+
+// commitID is the short ID copied from the graph menu: the first 7
+// characters, the usual length other Git tools show and accept.
+func commitID(hash string) string {
+	if len(hash) > 7 {
+		return hash[:7]
+	}
+	return hash
 }
 
 func shortHash(hash string) string {
