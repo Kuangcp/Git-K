@@ -913,7 +913,8 @@ func (a *root) commitDiffPane(c *ui.Context) {
 	t := c.Theme()
 	b := &a.branch
 	groupMode := b.fileSel < 0 && len(b.files) > 0
-	ui.Column(c).Fill().MinWidth(0).MinHeight(0).Children(func() {
+	ui.Column(c).Fill().MinWidth(0).MinHeight(0).
+		Padding(0, 0, diffBottomInset, 0).Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)

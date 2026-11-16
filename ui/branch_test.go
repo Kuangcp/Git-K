@@ -58,7 +58,8 @@ func TestBranchPane(t *testing.T) {
 
 	r.selectCommitFile(0)
 	tt.Frame()
-	if r.branch.fileSel != 0 || r.branch.mode != diffPatch || r.branch.diffAdded == 0 {
+	if r.branch.fileSel != 0 || r.branch.mode != diffPatch || r.branch.diffAdded == 0 ||
+		!r.branch.diff.FitContent {
 		t.Fatalf("commit diff: sel=%d mode=%v added=%d",
 			r.branch.fileSel, r.branch.mode, r.branch.diffAdded)
 	}

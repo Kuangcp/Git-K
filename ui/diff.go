@@ -354,9 +354,19 @@ func applyPatch(mode *diffMode, diff *editor.DiffState, raw *editor.Buffer, adde
 		return
 	}
 	diff.SetPatch(p)
+	// Small patches fit their lines inside a scroll container, so the
+	// editor's own bottom scroll bar cannot cover the last rows.
+	if strings.Count(patch, "\n") <= fittedPatchLines {
+		diff.FitContent = true
+		diff.NoScrollbars = true
+	}
 	*mode = diffPatch
 	*added, *deleted = diff.Stats()
 }
+
+// fittedPatchLines is the largest patch stacked as one tall diff view.
+// Bigger patches keep the editor's own virtual scrolling.
+const fittedPatchLines = 3000
 
 // countPatchLines counts added and removed lines for a patch the viewer
 // cannot parse.

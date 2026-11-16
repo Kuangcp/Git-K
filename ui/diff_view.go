@@ -9,9 +9,13 @@ import (
 	"git-k/app/gitx"
 )
 
+// diffBottomInset keeps the last diff row above the pane's edge, where a
+// footer, split divider or a horizontal bar can cover it.
+const diffBottomInset float32 = 40
+
 func (a *root) diffPane(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().MinHeight(0).Children(func() {
+	ui.Column(c).Fill().MinHeight(0).Padding(0, 0, diffBottomInset, 0).Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
@@ -103,7 +107,11 @@ func showDiffBody(c *ui.Context, d diffRender) {
 	case diffRaw:
 		editor.View(c, d.rawView).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0)
 	case diffPatch:
-		editor.DiffView(c, d.state).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0)
+		if d.state.FitContent {
+			fittedDiff(c, d.state)
+		} else {
+			editor.DiffView(c, d.state).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0)
+		}
 	default:
 		ui.Column(c).Fill().Center().Children(func() {
 			switch {
@@ -118,12 +126,24 @@ func showDiffBody(c *ui.Context, d diffRender) {
 	}
 }
 
+// fittedDiff puts a diff that is as high as its lines in a scroll of its
+// own, leaving room below so no bar or edge covers the last rows.
+func fittedDiff(c *ui.Context, state *editor.DiffState) {
+	ui.Scroll(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Children(func() {
+		ui.Column(c).FillWidth().Padding(0, 0, 48, 0).Children(func() {
+			editor.DiffView(c, state).FillWidth()
+		})
+	})
+}
+
 // groupDiffPane stacks the group's diffstat and each file's diff, which
 // keep the single-file view's colors.
 func (a *root) groupDiffPane(c *ui.Context) {
 	groupDiffPane(c, a.groupFiles, a.groupStat, &a.groupStatView)
 }
 
+// fittedDiff puts a diff that is as high as its lines in a scroll of its
+// own, leaving room below so no bar or edge covers the last rows.
 // groupDiffPane stacks a group's diffstat and each file's diff.
 func groupDiffPane(c *ui.Context, files []groupFileDiff, stat *editor.Buffer, statView *editor.State) {
 	t := c.Theme()
@@ -133,7 +153,7 @@ func groupDiffPane(c *ui.Context, files []groupFileDiff, stat *editor.Buffer, st
 	ui.Scroll(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Children(func() {
 		// Extra room below the last diff: FitContent measures the lines,
 		// and the scroll's edge would otherwise clip the final row.
-		ui.Column(c).FillWidth().MinWidth(0).Padding(12, 12, 28, 12).Gap(10).Children(func() {
+		ui.Column(c).FillWidth().MinWidth(0).Padding(12, 12, 48, 12).Gap(10).Children(func() {
 			if stat.LineCount() > 0 {
 				editor.View(c, statView).FillWidth()
 			}
