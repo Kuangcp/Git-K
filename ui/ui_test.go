@@ -43,6 +43,27 @@ func readFile(t *testing.T, dir, name string) string {
 	return string(b)
 }
 
+// gitMayFail runs git and returns its output when it exits nonzero, as a
+// merge with conflicts does.
+func gitMayFail(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("git %v succeeded, want a conflict", args)
+	}
+	return string(out)
+}
+
 func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -716,5 +737,37 @@ func TestLayoutLeftColumn(t *testing.T) {
 	}
 	if diff.X >= status.X {
 		t.Fatalf("diff must be left of status: diff=%v status=%v", diff, status)
+	}
+}
+
+// Opening a repository with a conflicted merge starts from git's merge
+// message instead of an empty or personal one.
+func TestMergeMessageOnOpen(t *testing.T) {
+	dir := newRepo(t)
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt", "base\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "base")
+	git(t, dir, "checkout", "-q", "-b", "side")
+	write("a.txt", "side\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "side")
+	git(t, dir, "checkout", "-q", "main")
+	write("a.txt", "main\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "main")
+	gitMayFail(t, dir, "merge", "side")
+
+	r := NewRoot(dir)
+	defer r.stopWatch()
+	if !strings.Contains(r.summary, "Merge branch 'side'") {
+		t.Fatalf("summary: %q", r.summary)
+	}
+	if strings.Contains(r.body.String(), "# Conflicts") {
+		t.Fatalf("body kept conflict comments: %q", r.body.String())
 	}
 }

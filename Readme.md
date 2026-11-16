@@ -49,7 +49,7 @@ make run                    # CGO_ENABLED=0 go run . -d test-repo
 - [x] 状态：`git status --porcelain=v2 -z` 一次读取分支、upstream、ahead/behind 和全部变更；四组展示（已暂存 / 冲突 / 已修改 / 未跟踪）
 - [x] 暂存：多选暂存、取消暂存、全部暂存、全部取消；双击行切换暂存；unborn HEAD 的取消暂存走 `git rm --cached`
 - [x] 差异：已暂存用 `git diff --cached`，已修改用 `git diff`，未跟踪用 `git diff --no-index`，冲突用 `git diff --cc`；支持分组汇总、diffstat 和补丁大小上限
-- [x] 提交：摘要 + 正文两个输入框，`git commit -F -` 走 stdin；草稿防抖写入 `.git/GIT_K_MSG`，重启恢复
+- [x] 提交：摘要 + 正文两个输入框，`git commit -F -` 走 stdin；草稿防抖写入 `.git/GIT_K_MSG`，重启恢复；合并冲突期间打开会载入 git 的 `MERGE_MSG`，保留 merge 提交信息
 - [x] 修正提交：`Ctrl+M` 读取 HEAD 信息并把 index 重置到 HEAD，再次提交走 `git commit --amend`
 - [x] 分支页：左栏提交图（HEAD + 本地分支，客户端 lane 布局），右栏提交详情、修改文件列表和单文件 diff；提交 diff 取第一父提交
 - [x] 主线切换：提交图上方可选某个本地分支，只看该分支及其已合入的提交；选 `ALL` 查看所有本地分支

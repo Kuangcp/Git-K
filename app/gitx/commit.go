@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,6 +22,45 @@ func (r *Repo) LoadAmend(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return msg, nil
+}
+
+// PendingMessage is the message to start editing: git's merge message
+// while a merge is in progress, unless this app saved a newer draft (the
+// user edited it), else the app's draft.
+func (r *Repo) PendingMessage() string {
+	draft := r.CommitMessage()
+	if _, err := os.Stat(filepath.Join(r.GitDir, "MERGE_HEAD")); err != nil {
+		return draft
+	}
+	path := filepath.Join(r.GitDir, "MERGE_MSG")
+	info, err := os.Stat(path)
+	if err != nil {
+		return draft
+	}
+	if draft != "" {
+		if di, err := os.Stat(r.DraftPath); err == nil && di.ModTime().After(info.ModTime()) {
+			return draft
+		}
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return draft
+	}
+	return cleanMergeMessage(string(b))
+}
+
+// cleanMergeMessage drops git's commented instructions ("# Conflicts:")
+// from a merge message, as git's default cleanup does for an editor.
+func cleanMergeMessage(s string) string {
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimRight(strings.Join(kept, "\n"), "\n")
 }
 
 // Commit creates a commit from the index with msg. amend rewrites the

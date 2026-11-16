@@ -316,7 +316,7 @@ func (a *root) openRepo(dir string) {
 	a.deleteAsk = false
 	a.revertPaths = nil
 	a.revertAsk = false
-	summary, body := splitMessage(repo.CommitMessage())
+	summary, body := splitMessage(repo.PendingMessage())
 	a.summary = summary
 	a.body.Reset(body)
 	a.draftTxt = a.message()

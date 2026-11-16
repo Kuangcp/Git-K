@@ -47,7 +47,7 @@ make run                    # CGO_ENABLED=0 go run . -d test-repo
 - [x] Status from one `git status --porcelain=v2 -z`, split into staged / conflicts / modified / untracked
 - [x] Multi-select stage, unstage, stage all, unstage all; double-click a row to toggle staging
 - [x] Diffs for staged, modified, untracked and conflicted files, grouped summaries with diffstat, and a patch size cap
-- [x] Commit with summary and body, sent through `git commit -F -`; drafts are written to `.git/GIT_K_MSG`
+- [x] Commit with summary and body, sent through `git commit -F -`; drafts are written to `.git/GIT_K_MSG`, and a conflicted merge starts from git's `MERGE_MSG` so the commit stays a merge commit
 - [x] Amend with `Ctrl+M`, including a reset of the index to HEAD
 - [x] Branch page: commit graph, commit message, changed files and per-file diff (against the first parent)
 - [x] Main-line selector: follow one local branch or show all local branches with `ALL`

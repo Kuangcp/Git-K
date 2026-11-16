@@ -216,7 +216,10 @@ main.go ──> ui.App / ui.root ──> app/gitx
   `git show --name-status -z --format=`，单文件补丁用
   `git diff <first-parent> <hash> -- <path>`（根提交用 `git show --patch`）。
   这些查询都不改仓库。
-- 提交用 `git commit -F -`，消息走 stdin；不要拼 shell 字符串，不要写临时消息文件。
+- 打开仓库时，若存在 `MERGE_HEAD` 则用 `.git/MERGE_MSG` 初始化提交信息（去掉
+  `#` 开头的冲突说明），除非 `GIT_K_MSG` 的 mtime 比 MERGE_MSG 新（用户已编辑）；
+  这样合并冲突后提交的仍是 merge commit 信息。提交仍用 `git commit -F -`，消息走
+  stdin；不要拼 shell 字符串，不要写临时消息文件。
   提交钩子可能很久，超时给 10 分钟，期间 UI 显示忙碌态。
 - 推送/拉取用 `git push` / `git pull`（`Repo.Push` / `Repo.Pull`），不拼 shell；
   失败信息写回 `note`，超时 5 分钟。环境设 `GIT_MERGE_AUTOEDIT=no`，避免 pull 打开

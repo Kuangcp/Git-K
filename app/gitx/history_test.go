@@ -2,6 +2,8 @@ package gitx
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -161,5 +163,55 @@ func TestHistoryBranchFilter(t *testing.T) {
 	}
 	if len(all) != 2 {
 		t.Fatalf("all log: %+v", all)
+	}
+}
+
+// A merge in progress starts from git's MERGE_MSG, cleaned of comments,
+// and committing it makes a merge commit.
+func TestPendingMergeMessage(t *testing.T) {
+	repo, dir := newRepo(t)
+	write(t, dir, "a.txt", "base\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "base")
+	git(t, dir, "checkout", "-q", "-b", "side")
+	write(t, dir, "a.txt", "side\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "side")
+	git(t, dir, "checkout", "-q", "main")
+	write(t, dir, "a.txt", "main\n")
+	git(t, dir, "add", "a.txt")
+	git(t, dir, "commit", "-q", "-m", "main")
+
+	cmd := exec.Command("git", "merge", "side")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("merge succeeded without a conflict: %s", out)
+	}
+	msg := repo.PendingMessage()
+	if !strings.Contains(msg, "Merge branch 'side'") {
+		t.Fatalf("merge message: %q", msg)
+	}
+	if strings.Contains(msg, "# Conflicts") {
+		t.Fatalf("comments kept: %q", msg)
+	}
+	write(t, dir, "a.txt", "resolved\n")
+	git(t, dir, "add", "a.txt")
+	if _, err := repo.Commit(context.Background(), msg, false); err != nil {
+		t.Fatal(err)
+	}
+	commits, err := repo.Log(context.Background(), 10, AllBranches)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits[0].Parents) != 2 {
+		t.Fatalf("commit is not a merge: %+v", commits[0].Parents)
 	}
 }
