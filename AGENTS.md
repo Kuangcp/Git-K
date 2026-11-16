@@ -70,7 +70,7 @@ ui/                  窗口与 tab
   app.go             单窗口多 tab：去重、切换、关闭、标题、窗口 bounds
   titlebar.go        无边框窗口标题栏、拖动区、窗口控制
   theme.go           Lobe 主题预设解析与无边框窗口底色
-  settings_view.go   设置弹窗（左侧外观/快捷键分类，右侧具体设置）
+  settings_view.go   设置弹窗（左侧外观/渲染/快捷键分类，右侧具体设置）
   tabs_view.go       tab 条视图
   home.go            首页、最近记录、加载历史仓库弹窗、选择目录
   root.go            单个 tab 的根状态、构造、View、布局、openRepo、异步桥
@@ -146,6 +146,10 @@ main.go ──> ui.App / ui.root ──> app/gitx
   作为 tab 打开。`App.closedRecent` 过滤已打开仓库。
 - 外观预设存 `settings.Config.Theme`：`Mode` 为 system/light/dark，`Scheme` 为
   default/ocean/forest/warm；设置弹窗修改即写回，启动时由 `App.applyTheme` 应用。
+- 渲染方式存 `settings.Config.SoftwareRender`：设置为关闭 GPU 时，`main` 在创建窗口前
+  设 `MYGO_GPU=0`，走 CPU 光栅化；`MYGO_GPU` 只在首帧选渲染器时读取，因此修改后
+  需重启应用。设置弹窗「渲染」里的「启用 GPU 渲染」开关默认开启，用于规避部分
+  Linux/X11 驱动（如旧 NVIDIA + 合成器）在文本密集页面的黑屏闪烁。
 - 窗口位置/大小存 `settings.Config.Window`；`App.Attach` 注册 OnMove/OnResize 保存，
   `main` 启动时用 `windowPosition` 校验仍有部分在屏幕内才恢复，否则居中。
 - tab：`App.open` 用 `NewRootLazy` 打开仓库（`gitx.Open` 的 `rev-parse --show-toplevel`

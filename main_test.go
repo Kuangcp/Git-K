@@ -108,3 +108,21 @@ func TestAppIconPixels(t *testing.T) {
 		}
 	}
 }
+
+// The renderer setting turns mygo's GPU path off before the window starts.
+func TestApplySoftwareRender(t *testing.T) {
+	t.Setenv("MYGO_GPU", "")
+	store, err := settings.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySoftwareRender(store)
+	if got := os.Getenv("MYGO_GPU"); got != "" {
+		t.Fatalf("GPU env set without the setting: %q", got)
+	}
+	store.Update(func(cfg *settings.Config) { cfg.SoftwareRender = true })
+	applySoftwareRender(store)
+	if got := os.Getenv("MYGO_GPU"); got != "0" {
+		t.Fatalf("GPU env after software rendering: %q", got)
+	}
+}

@@ -16,6 +16,7 @@ type settingsSection struct {
 func (a *App) settingsSections() []settingsSection {
 	return []settingsSection{
 		{"外观", a.themeSection},
+		{"渲染", a.renderSection},
 		{"快捷键", a.keymapSection},
 	}
 }
@@ -111,6 +112,34 @@ func (a *App) themeSection(c *ui.Context) {
 		a.setTheme(prefs, c)
 	}
 	ui.Text(c, "修改即时生效并保存在设置中。").FontSize(11).TextColor(c.Theme().TextMuted)
+}
+
+// renderSection chooses the GPU or the CPU rasterizer.
+func (a *App) renderSection(c *ui.Context) {
+	gpu := !a.softwareRender()
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Text(c, "启用 GPU 渲染").FontSize(12).Grow(1)
+		if ui.Switch(c, &gpu).Changed() {
+			a.setSoftwareRender(!gpu)
+			c.Invalidate()
+		}
+	})
+	ui.Text(c, "关闭后使用 CPU 渲染，重启 Git-K 生效；可规避部分 Linux/X11 驱动的黑屏闪烁。").
+		FontSize(11).TextColor(c.Theme().TextMuted)
+}
+
+// softwareRender reports whether the CPU renderer was chosen.
+func (a *App) softwareRender() bool {
+	return a.settings != nil && a.settings.Config().SoftwareRender
+}
+
+// setSoftwareRender stores the renderer choice; the window's renderer is
+// made once at startup, so the next launch applies it.
+func (a *App) setSoftwareRender(software bool) {
+	if a.settings == nil {
+		return
+	}
+	a.settings.Update(func(cfg *settings.Config) { cfg.SoftwareRender = software })
 }
 
 // keymapSection lists every bindable action, records a new chord on the

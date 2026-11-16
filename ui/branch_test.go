@@ -132,3 +132,15 @@ func TestCommitIDCopyLength(t *testing.T) {
 		t.Fatalf("short commitID = %q", got)
 	}
 }
+
+// The appearance settings offer the GPU renderer switch.
+func TestSettingsShowsRenderer(t *testing.T) {
+	app := NewApp(nil)
+	app.settingsOpen = true
+	app.settingsTab = 1
+	tt := ui.NewTester(app.View, 1280, 820)
+	tt.Frame()
+	if !tt.HasText("启用 GPU 渲染") || !tt.HasText("重启 Git-K 生效") {
+		t.Fatalf("renderer setting missing: %v", tt.Texts())
+	}
+}

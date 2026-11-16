@@ -52,6 +52,7 @@ func main() {
 		log.Printf("读取设置失败，使用默认值: %v", err)
 		store, _ = settings.Open("")
 	}
+	applySoftwareRender(store)
 	saveSettings := func() {
 		if err := store.Flush(); err != nil {
 			log.Printf("保存设置失败: %v", err)
@@ -107,6 +108,16 @@ func main() {
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// applySoftwareRender turns mygo's GPU renderer off when the setting asks
+// for it. mygo reads MYGO_GPU when it makes a window's renderer, so setting
+// it before the window runs is enough; the change applies on the next
+// launch only, since a window keeps the renderer it made.
+func applySoftwareRender(st *settings.Store) {
+	if st != nil && st.Config().SoftwareRender {
+		_ = os.Setenv("MYGO_GPU", "0")
 	}
 }
 

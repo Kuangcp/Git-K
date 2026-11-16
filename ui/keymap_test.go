@@ -118,7 +118,7 @@ func TestCustomShortcutDispatches(t *testing.T) {
 func TestSettingsShowsShortcuts(t *testing.T) {
 	app := NewApp(nil)
 	app.settingsOpen = true
-	app.settingsTab = 1
+	app.settingsTab = 2
 	tt := ui.NewTester(app.View, 1280, 820)
 	tt.Frame()
 	for _, want := range []string{"快捷键", "最小化窗口", "暂存选中", "录制", "恢复默认", "Ctrl+Q"} {

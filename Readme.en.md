@@ -54,6 +54,7 @@ make run                    # CGO_ENABLED=0 go run . -d test-repo
 - [x] File watching for the worktree and `.git`, with automatic status refresh
 - [x] Context actions: revert modifications and delete untracked files, both with confirmation
 - [x] Themes: system / light / dark and default / ocean / forest / warm palettes from Lobe UI tokens
+- [x] Rendering: a settings switch turns off GPU rendering for CPU rasterization (restart required), avoiding black flashes from some Linux/X11 drivers on text-heavy pages
 - [x] Frameless window with a custom title bar, remembered position and size, and a recent-repository home page
 - [x] Configurable keymap with recording and conflict handling in the settings dialog
 - [x] Release builds for six targets with `tar.gz` / `zip` archives and `SHA256SUMS`

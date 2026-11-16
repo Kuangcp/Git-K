@@ -23,6 +23,9 @@ type Config struct {
 	Window  Window   `json:"window"`
 	Theme   Theme    `json:"theme"`
 	Recent  []string `json:"recent,omitempty"`
+	// SoftwareRender turns off mygo's GPU renderer. Some X11 drivers
+	// flash black frames in the GL path; a restart applies the choice.
+	SoftwareRender bool `json:"software_render,omitempty"`
 	// Shortcuts maps action IDs to their user-set chords. Actions not
 	// listed keep their defaults; an empty value means unbound.
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
