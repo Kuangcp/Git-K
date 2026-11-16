@@ -48,6 +48,8 @@ var keyActions = []keyAction{
 		Def: []chord{{ui.Ctrl, ui.Key1}}},
 	{ID: "branches", Label: "切换分支视图", Scope: scopeRepo,
 		Def: []chord{{ui.Ctrl, ui.Key2}}},
+	{ID: "stashes", Label: "切换 Stash 视图", Scope: scopeRepo,
+		Def: []chord{{ui.Ctrl, ui.Key3}}},
 
 	{ID: "stage", Label: "暂存选中", Scope: scopeRepo,
 		Def: []chord{{ui.Ctrl, ui.KeyS}}},

@@ -430,3 +430,61 @@ func (a *root) clearGroup() {
 	}
 	a.diffKey = ""
 }
+
+// groupFilesFromPatch splits one multi-file patch, as a stash's, into the
+// stacked rows the diff pane shows. A patch the parser cannot read stays
+// one raw file, so its text is never lost.
+func groupFilesFromPatch(patch string) (files []groupFileDiff, stat string, added, deleted int) {
+	if strings.TrimSpace(patch) == "" {
+		return nil, "", 0, 0
+	}
+	patches, err := editor.ParsePatch(patch)
+	if err != nil || len(patches) == 0 {
+		f := rawGroupFile("", patch)
+		add, del := countPatchLines(patch)
+		return []groupFileDiff{f}, "", add, del
+	}
+	var stats []fileStat
+	for _, p := range patches {
+		path := p.NewName
+		if path == "" {
+			path = p.OldName
+		}
+		if path == "" {
+			path = "diff"
+		}
+		switch {
+		case p.Binary:
+			files = append(files, rawGroupFile(path, "二进制文件"))
+		case len(p.Hunks) == 0:
+			files = append(files, rawGroupFile(path, "文件模式或权限变更"))
+		default:
+			f := groupFileDiff{path: path, mode: diffPatch}
+			f.diff = editor.DiffState{
+				Layout: editor.DiffUnified, FitContent: true, NoScrollbars: true,
+			}
+			f.diff.SetPatch(p)
+			add, del := f.diff.Stats()
+			stats = append(stats, fileStat{path: path, added: add, deleted: del})
+			added += add
+			deleted += del
+			files = append(files, f)
+		}
+	}
+	return files, formatDiffStat(stats), added, deleted
+}
+
+// rawGroupFile is one unparsed file of a stacked diff.
+func rawGroupFile(path, text string) groupFileDiff {
+	f := groupFileDiff{path: path, mode: diffRaw, raw: editor.NewBuffer(text)}
+	f.view = editor.State{
+		Buffer:       f.raw,
+		ReadOnly:     true,
+		SoftWrap:     true,
+		LineNumbers:  editor.LineNumbersOn,
+		NoFolding:    true,
+		FitContent:   true,
+		NoScrollbars: true,
+	}
+	return f
+}

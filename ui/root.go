@@ -65,6 +65,7 @@ type root struct {
 
 	pane   paneKind
 	branch branchState
+	stash  stashState
 
 	diff        editor.DiffState
 	diffKey     string
@@ -127,6 +128,7 @@ func newRoot(dir string, st *settings.Store, lazy bool) *root {
 		branchDetailPercent: 52,
 		cur:                 -1,
 		branch:              newBranchState(),
+		stash:               newStashState(),
 		settings:            st,
 	}
 	a.loadLayout()
@@ -183,8 +185,11 @@ func (a *root) View(c *ui.Context) {
 	// 帧首同步 diff：DiffState 被视图元素按指针引用，构建后再重置会让
 	// 正在绘制的编辑器读到零值。
 	curBefore := a.cur
-	if a.pane == paneWorkspace {
+	if a.pane != paneBranches {
 		a.syncDiff()
+	}
+	if a.pane == paneStashes {
+		a.syncStashDiff()
 	}
 	ui.Column(c).Fill().Children(func() {
 		a.topBar(c)
@@ -192,12 +197,21 @@ func (a *root) View(c *ui.Context) {
 			a.branchPane(c)
 		} else {
 			ui.SplitPercent(c, &a.sidePercent, func() {
-				// 左列：提交信息在上，差异在下；右列是状态。
+				// 左列：工作区是提交信息、Stash 页是 Stash 列表；下方是差异，
+				// 右列都是状态。
 				ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 					ui.SplitVerticalPercent(c, &a.commitPercent, func() {
-						a.commitPane(c)
+						if a.pane == paneStashes {
+							a.stashPane(c)
+						} else {
+							a.commitPane(c)
+						}
 					}, func() {
-						a.diffPane(c)
+						if a.pane == paneStashes && a.stash.preview {
+							a.stashDiffPane(c)
+						} else {
+							a.diffPane(c)
+						}
 					}).Fill()
 				})
 			}, func() {
@@ -208,8 +222,9 @@ func (a *root) View(c *ui.Context) {
 	})
 	a.deleteDialog(c)
 	a.revertDialog(c)
+	a.stashDropDialog(c)
 	a.shortcuts(c)
-	if a.pane == paneWorkspace && a.cur != curBefore {
+	if a.pane != paneBranches && a.cur != curBefore {
 		// 点击选中的新行在本帧才写入 cur，下一帧再同步 diff。
 		c.Invalidate()
 	}
@@ -312,6 +327,7 @@ func (a *root) openRepo(dir string) {
 	a.groupStat.Reset("")
 	a.groupPrevCur = -1
 	a.resetBranch()
+	a.resetStash()
 	a.deletePaths = nil
 	a.deleteAsk = false
 	a.revertPaths = nil

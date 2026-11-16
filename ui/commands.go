@@ -31,6 +31,9 @@ func (a *root) shortcuts(c *ui.Context) {
 		case "branches":
 			a.setPane(paneBranches)
 			c.Invalidate()
+		case "stashes":
+			a.setPane(paneStashes)
+			c.Invalidate()
 		case "stage":
 			a.stageSelected()
 		case "stageAll":

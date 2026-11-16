@@ -55,6 +55,7 @@ func (a *root) topBar(c *ui.Context) {
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		a.paneTab(c, "工作区", paneWorkspace)
 		a.paneTab(c, "分支", paneBranches)
+		a.paneTab(c, "Stash", paneStashes)
 		ui.Text(c, "").Grow(1)
 		if a.pane == paneWorkspace {
 			iconButtonDisabled(c, stageAllIcon, "全部暂存", a.keyTip("stageAll", "全部暂存"),
@@ -138,9 +139,12 @@ func (a *root) footer(c *ui.Context) {
 			}
 			hints = append(hints, "双击行 切换暂存")
 		}
+		if a.pane == paneStashes {
+			hints = append(hints, "点击 Stash 预览", "右键 Pop / Drop")
+		}
 		for _, h := range [][2]string{
 			{"refresh", "刷新"}, {"pull", "拉取"}, {"push", "推送"},
-			{"workspace", "工作区"}, {"branches", "分支"},
+			{"workspace", "工作区"}, {"branches", "分支"}, {"stashes", "Stash"},
 			{"minimize", "最小化"},
 		} {
 			if s := a.keyHint(h[0], h[1]); s != "" {

@@ -20,6 +20,7 @@ type paneKind uint8
 const (
 	paneWorkspace paneKind = iota
 	paneBranches
+	paneStashes
 )
 
 // commitFile is one file of the selected commit.
@@ -132,8 +133,11 @@ func (a *root) setPane(k paneKind) {
 		return
 	}
 	a.pane = k
-	if k == paneBranches {
+	switch k {
+	case paneBranches:
 		a.loadLog()
+	case paneStashes:
+		a.loadStashes()
 	}
 }
 

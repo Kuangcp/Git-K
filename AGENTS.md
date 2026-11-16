@@ -88,6 +88,7 @@ ui/                  窗口与 tab
   commit_view.go     提交面板
   diff_view.go       差异面板与分组汇总；工作区/提交共用差异渲染
   branch.go          分支 tab：提交图、提交详情、文件列表、提交 diff
+  stash.go           Stash tab：Stash 列表、基提交、堆叠 diff、Pop/Drop
 ui/lobe/             vendored Lobe UI 主题 token（MIT）
 ui/app_test.go       tab、首页、最近记录、单实例参数相关测试
 ui/ui_test.go        无窗口视图 + 临时仓库端到端测试
@@ -249,10 +250,23 @@ main.go ──> ui.App / ui.root ──> app/gitx
   （`List.Changed`）退出汇总。
 - 顶栏右侧全部用图标按钮，按功能分组并用 1px 竖线分隔：全部暂存/全部取消、
   加载最近仓库/打开仓库、拉取/推送/刷新。无内容可操作时按钮置灰，tooltip 带当前键位。
-- 每个仓库 tab 顶栏左侧有「工作区 / 分支」二级 tab（`root.pane`）。工作区就是原来的
-  commit/diff/status 三栏；分支 tab 左栏是提交图，右栏上下分为提交详情+文件列表和
-  文件 diff。两个 split 比例存 `Layout.BranchGraphPercent` / `BranchDetailPercent`，
+- 每个仓库 tab 顶栏左侧有「工作区 / 分支 / Stash」二级 tab（`root.pane`）。工作区就是
+  原来的 commit/diff/status 三栏；分支 tab 左栏是提交图，右栏上下分为提交详情+文件列表和
+  文件 diff。两个 split 比例存 `Layout.BranchGraphPercent` / `Layout.BranchDetailPercent`，
   与工作区比例互不影响。切换 tab 时重新读 log，但保留仍存在的选中提交。
+- Stash tab 复用工作区的左右比例（`Layout.SidePercent` / `CommitPercent`）：左上是
+  Stash 列表（替代提交面板），左下是差异，右侧仍是工作区状态。Stash 行显示
+  `stash@{n}`、基提交短 ID（第一父提交，tooltip 是完整 ID）、时间和消息；点击行预览
+  该 Stash 的堆叠 diff，点击状态文件或差异头的「工作区差异」回到工作区 diff。
+  右键 `Pop` / `Drop`；Drop 先走 `ui.AlertDialog` 二次确认。Pop/Drop 用列表里的
+  `stash@{n}` 作为参数，成功后刷新状态并重读 Stash 列表（`applyStatus` 在 Stash tab
+  会触发 `loadStashes`）。
+- Stash 后端在 `app/gitx/stash.go`：`Stashes` 用
+  `git stash list --format=%gd%x00%H%x00%P%x00%ct%x00%s` 一次读回，基提交取 `%P` 的
+  第一父；`StashDiff` 用 `git stash show -p --include-untracked`（旧 git 回退到不带
+  `--include-untracked`）；`StashPop` / `StashDrop` 只接受 `stash@{n}` 形式的引用。
+  Stash diff 是多文件 patch，`groupFilesFromPatch` 一次 `editor.ParsePatch` 后按文件
+  建堆叠 diff，不按文件逐个起 git 进程。
 - 分支页复用工作区的差异渲染（`diffRender` / `showDiffBody`、`groupDiffPane`）和
   文件行（`fileRowContent`）；提交详情、文件列表、diff 的选择状态各自放在
   `root.branch`。默认选中「修改的文件」头，堆叠展示全部文件补丁；点单个文件再切到
@@ -280,7 +294,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
   写入 `.git/GIT_K_MSG`，读回时由 `splitMessage()` 拆成两个框，提交成功后清空。
 - 快捷键默认对齐 git-cola：`Ctrl+S` 暂存、`Ctrl+Shift+S` 全部暂存、
   `Ctrl+U` 取消暂存、`Ctrl+R` / `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+M` 加载上次
-  提交进入修正模式、`Ctrl+P` 推送、`Ctrl+L` 拉取、`Ctrl+1` 工作区、`Ctrl+2` 分支。
+  提交进入修正模式、`Ctrl+P` 推送、`Ctrl+L` 拉取、`Ctrl+1` 工作区、`Ctrl+2` 分支、
+  `Ctrl+3` Stash。
   全部动作在 `ui/keymap.go` 的
   `keyActions` 里声明（ID、标签、作用域、默认键位），用 `bindings.hit` 走
   `Context.Shortcut`，不要全局 hook。设置弹窗的「快捷键」分区可录制新组合、单项/
@@ -302,6 +317,10 @@ main.go ──> ui.App / ui.root ──> app/gitx
   根提交与空仓库的 diff。
 - `ui/branch_test.go`：Ctrl+2 打开分支页、首个提交与文件列表、点击文件后的 diff、
   Ctrl+1 返回工作区、提交图 lane 分配。
+- `app/gitx/stash_test.go`：真实 stash 的列表/基提交/多文件（含 untracked）diff、
+  Pop 恢复工作区、Drop 不动工作区、非法引用。
+- `ui/stash_test.go`：Ctrl+3 打开 Stash 页、基提交与消息显示、首次预览、点击状态文件
+  退出预览、Pop 后清空、Drop 确认框、右键菜单 Pop。
 - `ui/ui_test.go`：`ui.NewTester` 无窗口跑完整视图；用临时仓库验证三栏出现、
   diff 加载、暂存后计数、提交后状态清空且旧 diff 被清掉。
 - 测试必须隔离用户配置：`GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`，
@@ -317,8 +336,8 @@ main.go ──> ui.App / ui.root ──> app/gitx
 
 已实现：仓库发现、porcelain v2 状态四组、多选暂存/取消暂存/全部、三种 diff、
 编辑器草稿、commit/amend、文件监听刷新、快捷键、空态和错误提示、单窗口多 tab、
-单实例启动与命令行转交、分支页的提交图与提交详情浏览。
+单实例启动与命令行转交、分支页的提交图与提交详情浏览、Stash 列表预览与 Pop/Drop。
 
-未实现（不要假装支持）：部分暂存（hunk/line）、分支切换、stash、
+未实现（不要假装支持）：部分暂存（hunk/line）、分支切换、Stash 创建/apply、
 merge/rebase/cherry-pick 操作、冲突 combined diff 的专用渲染、图片 diff、
 子模块操作、提交模板/签名/spellcheck、多窗口。

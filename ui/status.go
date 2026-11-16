@@ -38,6 +38,9 @@ func (a *root) applyStatus(gen uint64, st gitx.Status, err error) {
 	a.startWatch()
 	if err != nil {
 		a.statusErr = "读取状态失败：" + err.Error()
+		if a.pane == paneStashes {
+			a.loadStashes()
+		}
 		return
 	}
 	a.statusErr = ""
@@ -70,6 +73,9 @@ func (a *root) applyStatus(gen uint64, st gitx.Status, err error) {
 	}
 	if a.cur < 0 {
 		a.chosen.Clear()
+	}
+	if a.pane == paneStashes {
+		a.loadStashes()
 	}
 }
 

@@ -46,6 +46,8 @@ func (a *root) statusPane(c *ui.Context) {
 		}).Grow(1).Padding(0, 4)
 		if list.Changed() {
 			a.clearGroup()
+			a.clearStashPreview()
+			c.Invalidate()
 		}
 		// 双击在列表构建完后处理：暂存会同步刷新 entries，构建中改会越界。
 		if hasToggle && !a.busy {
@@ -68,6 +70,7 @@ func (a *root) statusRow(c *ui.Context, i int) bool {
 			FontSize(11).Bold().Background(bg).BorderWidth(0).Radius(0).TextColor(fg)
 		if header.Clicked() {
 			a.selectGroup(e.group)
+			a.clearStashPreview()
 			c.Invalidate()
 		}
 		return false
