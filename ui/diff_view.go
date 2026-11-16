@@ -101,9 +101,9 @@ func showDiffBody(c *ui.Context, d diffRender) {
 			ui.Text(c, d.empty).FontSize(12).TextColor(t.TextMuted)
 		})
 	case diffRaw:
-		editor.View(c, d.rawView).FillWidth().Grow(1).Shrink(1).MinHeight(0)
+		editor.View(c, d.rawView).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0)
 	case diffPatch:
-		editor.DiffView(c, d.state).FillWidth().Grow(1).Shrink(1).MinHeight(0)
+		editor.DiffView(c, d.state).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0)
 	default:
 		ui.Column(c).Fill().Center().Children(func() {
 			switch {
@@ -130,10 +130,10 @@ func groupDiffPane(c *ui.Context, files []groupFileDiff, stat *editor.Buffer, st
 	// Grow into the room left after the diff header rather than taking the
 	// whole parent as Fill does: the scroll's own bottom would then sit
 	// below the pane, and its last rows would stay clipped at the edge.
-	ui.Scroll(c).FillWidth().Grow(1).Shrink(1).MinHeight(0).Children(func() {
+	ui.Scroll(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Children(func() {
 		// Extra room below the last diff: FitContent measures the lines,
 		// and the scroll's edge would otherwise clip the final row.
-		ui.Column(c).FillWidth().Padding(12, 12, 28, 12).Gap(10).Children(func() {
+		ui.Column(c).FillWidth().MinWidth(0).Padding(12, 12, 28, 12).Gap(10).Children(func() {
 			if stat.LineCount() > 0 {
 				editor.View(c, statView).FillWidth()
 			}

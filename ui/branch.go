@@ -517,22 +517,24 @@ func (a *root) resetCommitDiff() {
 func (a *root) branchPane(c *ui.Context) {
 	t := c.Theme()
 	ui.SplitPercent(c, &a.branchGraphPercent, func() {
-		ui.Column(c).Fill().BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
+		ui.Column(c).Fill().MinWidth(0).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
 			a.commitGraph(c)
 		})
 	}, func() {
-		ui.SplitVerticalPercent(c, &a.branchDetailPercent, func() {
-			a.commitDetail(c)
-		}, func() {
-			a.commitDiffPane(c)
-		}).Fill()
-	}).Fill()
+		ui.Column(c).Fill().MinWidth(0).MinHeight(0).Children(func() {
+			ui.SplitVerticalPercent(c, &a.branchDetailPercent, func() {
+				a.commitDetail(c)
+			}, func() {
+				a.commitDiffPane(c)
+			}).Fill().MinHeight(0)
+		})
+	}).Fill().MinWidth(0).MinHeight(0)
 }
 
 func (a *root) commitGraph(c *ui.Context) {
 	t := c.Theme()
 	b := &a.branch
-	ui.Column(c).Fill().MinHeight(0).Children(func() {
+	ui.Column(c).Fill().MinWidth(0).MinHeight(0).Children(func() {
 		a.paneTitle(c, "提交图", fmt.Sprintf("%d 个提交", len(b.commits)))
 		ui.Row(c).Height(34).PaddingX(8).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "主线").FontSize(11).TextColor(t.TextMuted)
@@ -559,7 +561,7 @@ func (a *root) commitGraph(c *ui.Context) {
 			b.list.Label = func(i int) string { return b.commits[i].Subject }
 			ui.List(c, &b.list, len(b.commits), func(i int) {
 				a.graphRow(c, i)
-			}).Grow(1).Padding(0, 4)
+			}).Grow(1).MinWidth(0).MinHeight(0).Padding(0, 4)
 		}
 	})
 }
@@ -568,7 +570,7 @@ func (a *root) graphRow(c *ui.Context, i int) {
 	t := c.Theme()
 	b := &a.branch
 	cm := b.commits[i]
-	row := ui.ButtonBase(c).FillWidth().Height(30).PaddingX(8).Gap(8).
+	row := ui.ButtonBase(c).FillWidth().MinWidth(0).Height(30).PaddingX(8).Gap(8).
 		AlignItems(ui.Center).Label(cm.Subject)
 	row.ContextMenu(func(m *ui.Menu) {
 		if m.Item("复制 Commit ID").Chosen() {
@@ -579,7 +581,7 @@ func (a *root) graphRow(c *ui.Context, i int) {
 		ui.Box(c).Width(graphWidth()).Height(30).Clip().
 			Draw(func(p *ui.Painter, r ui.Rect) { drawLanes(p, r, b.graph[i], t) })
 		refChips(c, cm.Refs, t)
-		ui.Text(c, cm.Subject).FontSize(12).SingleLine().Grow(1)
+		ui.Text(c, cm.Subject).FontSize(12).SingleLine().Grow(1).MinWidth(0)
 		ui.Text(c, shortHash(cm.Hash)).FontSize(10).TextColor(t.TextMuted)
 	})
 	switch {
@@ -835,7 +837,7 @@ func refLabel(refs string) string {
 func (a *root) commitDetail(c *ui.Context) {
 	t := c.Theme()
 	b := &a.branch
-	ui.Column(c).Fill().MinHeight(0).Children(func() {
+	ui.Column(c).Fill().MinWidth(0).MinHeight(0).Children(func() {
 		if b.sel < 0 || b.sel >= len(b.commits) {
 			ui.Column(c).Fill().Center().Children(func() {
 				ui.Text(c, "选择一个提交查看详情").FontSize(12).TextColor(t.TextMuted)
@@ -843,7 +845,7 @@ func (a *root) commitDetail(c *ui.Context) {
 			return
 		}
 		cm := b.commits[b.sel]
-		ui.Column(c).Padding(12).Gap(6).Children(func() {
+		ui.Column(c).FillWidth().MinWidth(0).Padding(12).Gap(6).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, shortHash(cm.Hash)).FontSize(11).Font("monospace").
 					TextColor(t.Accent)
@@ -890,7 +892,7 @@ func (a *root) commitDetail(c *ui.Context) {
 			b.fileList.Label = func(i int) string { return gitx.DisplayPath(b.files[i].path) }
 			list := ui.List(c, &b.fileList, len(b.files), func(i int) {
 				a.commitFileRow(c, i)
-			}).Grow(1).Padding(0, 4)
+			}).Grow(1).MinWidth(0).MinHeight(0).Padding(0, 4)
 			if list.Changed() {
 				a.selectCommitFile(b.fileSel)
 			}
@@ -911,7 +913,7 @@ func (a *root) commitDiffPane(c *ui.Context) {
 	t := c.Theme()
 	b := &a.branch
 	groupMode := b.fileSel < 0 && len(b.files) > 0
-	ui.Column(c).Fill().MinHeight(0).Children(func() {
+	ui.Column(c).Fill().MinWidth(0).MinHeight(0).Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
