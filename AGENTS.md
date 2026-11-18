@@ -254,6 +254,12 @@ main.go ──> ui.App / ui.root ──> app/gitx
   原来的 commit/diff/status 三栏；分支 tab 左栏是提交图，右栏上下分为提交详情+文件列表和
   文件 diff。两个 split 比例存 `Layout.BranchGraphPercent` / `Layout.BranchDetailPercent`，
   与工作区比例互不影响。切换 tab 时重新读 log，但保留仍存在的选中提交。
+- 提交图 lane：分支尖端从自己的提交开始，不画上行竖线；多个子 lane 指向同一父提交时，
+  在父提交行用曲线汇入节点；合并提交用菱形，并从节点向各父提交 lane 画曲线。
+  两类连接线都是四分之一椭圆（cubic 控制比 4/3·tan(π/8)）：合并线从节点水平离开、
+  在行底垂直并入父 lane；派生线从行顶垂直离开、水平汇入节点。这样弯折两端都与
+  竖直 lane 相切，不要改回先竖后横的直角拐弯。
+  同一父提交的多条 lane 会保留到该提交那一行再汇合，不要提前去重。
 - Stash tab 复用工作区的左右比例（`Layout.SidePercent` / `CommitPercent`）：左上是
   Stash 列表（替代提交面板），左下是选中文件的差异，右侧是选中 Stash 的变更文件
   列表（`stashStatusPane`，不再是工作区 status）。Stash 行显示 `stash@{n}`、基提交

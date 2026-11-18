@@ -145,3 +145,24 @@ func TestSettingsShowsRenderer(t *testing.T) {
 		t.Fatalf("renderer setting missing: %v", tt.Texts())
 	}
 }
+
+// Two branches forked from one commit draw their other lane curving into
+// the fork commit, and a branch tip starts without a line above it.
+func TestLayoutGraphFork(t *testing.T) {
+	commits := []gitx.Commit{
+		{Hash: "c", Parents: []string{"b"}},
+		{Hash: "d", Parents: []string{"b"}},
+		{Hash: "b", Parents: []string{"a"}},
+		{Hash: "a"},
+	}
+	rows := layoutGraph(commits)
+	if !rows[0].tip || !rows[1].tip {
+		t.Fatalf("tips: %v %v", rows[0].tip, rows[1].tip)
+	}
+	if len(rows[2].incoming) != 1 || rows[2].incoming[0] != 1 {
+		t.Fatalf("fork incoming: %+v", rows[2].incoming)
+	}
+	if len(rows[2].after) != 1 || rows[2].after[0] != "a" {
+		t.Fatalf("fork after: %+v", rows[2].after)
+	}
+}

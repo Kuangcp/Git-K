@@ -19,7 +19,7 @@ The goal is **small, fast, no WebView, no cgo**: one static binary, no browser r
 - **The git you know**: status, diffs, staging, commits, push and pull all call `git`; no object database reimplementation and no go-git.
 - **One window, many repositories**: each repository gets a tab; opening the same repository again focuses its existing tab. Starting from any subdirectory resolves to the repository root.
 - **git-cola-like workspace**: files in a status list on the right, commit message and diff on the left, with grouped diffs and multi-select staging.
-- **Commit graph**: a branch page with a lane graph, a main-line selector (one local branch or `ALL`), merge curves and diamond merge nodes.
+- **Commit graph**: a branch page with a lane graph, a main-line selector (one local branch or `ALL`), merge curves and diamond merge nodes; forked child lanes curve into their common parent.
 - **Rebindable shortcuts**: record new chords in Settings; bindings persist in `settings.json` and the footer/tooltips follow them.
 
 ## Running

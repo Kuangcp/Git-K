@@ -42,6 +42,11 @@ type graphRow struct {
 	// afterNew marks lanes that this commit created below it; their line
 	// starts where a merge curve reaches the row's bottom.
 	afterNew []bool
+	// incoming are lanes above that also wait for this commit: a fork's
+	// other children, whose lines curve into the dot.
+	incoming []int
+	// tip marks a commit that starts a lane: no line comes from above it.
+	tip bool
 	// merge is true for a commit with more than one parent, drawn as a
 	// diamond.
 	merge bool
@@ -661,13 +666,18 @@ func graphWidth() float32 { return 8 + float32(maxLanes)*12 }
 
 const maxLanes = 6
 
+// curveK is the cubic control ratio (4/3·tan(π/8)) that makes a bezier
+// match a quarter ellipse. Merge and fork bends use it so both curves
+// leave a lane vertically and meet the dot horizontally.
+const curveK = 0.5523
+
 // drawLanes paints the vertical lanes and the commit's dot.
 func drawLanes(p *ui.Painter, r ui.Rect, g graphRow, t *ui.Theme) {
 	const step = 12
 	mid := r.Y + r.H/2
 	for j := range g.before {
-		if j >= maxLanes {
-			break
+		if j >= maxLanes || j == g.col && g.tip || containsInt(g.incoming, j) {
+			continue
 		}
 		x := r.X + 6 + float32(j)*step
 		p.Fill(ui.Rect{X: x - 0.75, Y: r.Y, W: 1.5, H: r.H / 2}, laneColor(t, j), 0)
@@ -685,17 +695,34 @@ func drawLanes(p *ui.Painter, r ui.Rect, g graphRow, t *ui.Theme) {
 		x := r.X + 6 + float32(j)*step
 		p.Fill(ui.Rect{X: x - 0.75, Y: mid, W: 1.5, H: r.H / 2}, laneColor(t, j), 0)
 	}
-	// A merge bends from the commit's dot to the lane of each parent,
-	// which then runs down to the merged commit.
 	dotX := r.X + 6 + float32(g.col)*step
+	// A merge bends from the commit's dot to the lane of each parent,
+	// which then runs down to the merged commit. The bend is a quarter
+	// ellipse: it leaves the dot horizontally and arrives at the row's
+	// bottom vertically, so the lane below continues its tangent.
 	for _, j := range g.edges {
 		if j == g.col || j >= maxLanes {
 			continue
 		}
 		x := r.X + 6 + float32(j)*step
+		dx := x - dotX
 		var path ui.Path
 		path.MoveTo(dotX, mid).
-			CubeTo(dotX, mid+r.H/2, x, r.Y+r.H-r.H/2, x, r.Y+r.H).
+			CubeTo(dotX+curveK*dx, mid, x, r.Y+r.H-curveK*r.H/2, x, r.Y+r.H).
+			Cap(ui.RoundCap)
+		p.StrokePath(&path, 1.5, laneColor(t, j))
+	}
+	// A fork's other child lanes curve into the commit's dot, mirroring
+	// the merge bend: vertical at the row's top, horizontal at the dot.
+	for _, j := range g.incoming {
+		if j >= maxLanes {
+			continue
+		}
+		x := r.X + 6 + float32(j)*step
+		dx := x - dotX
+		var path ui.Path
+		path.MoveTo(x, r.Y).
+			CubeTo(x, r.Y+curveK*r.H/2, dotX+curveK*dx, mid, dotX, mid).
 			Cap(ui.RoundCap)
 		p.StrokePath(&path, 1.5, laneColor(t, j))
 	}
@@ -734,7 +761,8 @@ func layoutGraph(commits []gitx.Commit) []graphRow {
 	rows := make([]graphRow, len(commits))
 	for i, c := range commits {
 		col := indexGraphLane(lanes, c.Hash)
-		if col < 0 {
+		tip := col < 0
+		if tip {
 			col = len(lanes)
 			lanes = append(lanes, graphLane{hash: c.Hash, id: nextID})
 			nextID++
@@ -744,6 +772,20 @@ func layoutGraph(commits []gitx.Commit) []graphRow {
 		for _, l := range lanes {
 			beforeIDs[l.id] = true
 		}
+		var incoming []int
+		for j, l := range lanes {
+			if j != col && l.hash == c.Hash {
+				incoming = append(incoming, j)
+			}
+		}
+		// The other lanes waiting for this commit join its dot here.
+		kept := lanes[:0]
+		for j, l := range lanes {
+			if j == col || l.hash != c.Hash {
+				kept = append(kept, l)
+			}
+		}
+		lanes = kept
 		if len(c.Parents) == 0 {
 			lanes = append(lanes[:col], lanes[col+1:]...)
 		} else {
@@ -755,7 +797,6 @@ func layoutGraph(commits []gitx.Commit) []graphRow {
 				}
 			}
 		}
-		lanes = dedupeGraphLanes(lanes)
 		after := laneHashes(lanes)
 		afterNew := make([]bool, len(lanes))
 		for j, l := range lanes {
@@ -770,6 +811,7 @@ func layoutGraph(commits []gitx.Commit) []graphRow {
 		rows[i] = graphRow{
 			col: col, before: before, after: after, edges: edges,
 			afterNew: afterNew, merge: len(c.Parents) > 1,
+			incoming: incoming, tip: tip,
 		}
 	}
 	return rows
@@ -783,19 +825,13 @@ func laneHashes(lanes []graphLane) []string {
 	return out
 }
 
-// dedupeGraphLanes keeps one lane per commit: a merge whose parents are
-// already tracked joins those lanes instead of drawing a second line.
-func dedupeGraphLanes(lanes []graphLane) []graphLane {
-	seen := make(map[string]bool, len(lanes))
-	out := lanes[:0]
-	for _, l := range lanes {
-		if l.hash == "" || seen[l.hash] {
-			continue
+func containsInt(list []int, v int) bool {
+	for _, x := range list {
+		if x == v {
+			return true
 		}
-		seen[l.hash] = true
-		out = append(out, l)
 	}
-	return out
+	return false
 }
 
 func indexGraphLane(lanes []graphLane, hash string) int {
