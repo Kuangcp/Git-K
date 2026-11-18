@@ -246,6 +246,9 @@ main.go ──> ui.App / ui.root ──> app/gitx
   `ui.Button` 铺满整行来接收点击——`ListState.Header` 的行不参与命中测试。
   汇总是可滚动的堆叠：顶部是 git 风格的 diffstat（`formatDiffStat`），下面是
   每个文件的路径和独立的 `editor.DiffView`（`FitContent`），配色与单文件一致。
+  小补丁（`fittedPatchLines` 以内）同样走 `FitContent` + 外层 `ui.Scroll`：纵向滚动
+  归外层，横向滚动条仍由编辑器自己画（不要设 `NoScrollbars`），固定在可见区域底部，
+  长行可左右拖动；滚到底时靠外层内容的底部留白让最后一行避开这条横条。
   `editor.DiffState` 一次只接受一个文件，所以按文件各存一个 state。列表变选
   （`List.Changed`）退出汇总。
 - 顶栏右侧全部用图标按钮，按功能分组并用 1px 竖线分隔：全部暂存/全部取消、

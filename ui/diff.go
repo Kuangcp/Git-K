@@ -200,7 +200,7 @@ func groupFileFromPatch(path, patch string, err error) (groupFileDiff, *fileStat
 		case perr == nil && len(patches) > 0 && !patches[0].Binary && len(patches[0].Hunks) > 0:
 			f.mode = diffPatch
 			f.diff = editor.DiffState{
-				Layout: editor.DiffUnified, FitContent: true, NoScrollbars: true,
+				Layout: editor.DiffUnified, FitContent: true,
 			}
 			f.diff.SetPatch(patches[0])
 			add, del := f.diff.Stats()
@@ -361,11 +361,12 @@ func applyPatch(mode *diffMode, diff *editor.DiffState, raw *editor.Buffer, adde
 		return
 	}
 	diff.SetPatch(p)
-	// Small patches fit their lines inside a scroll container, so the
-	// editor's own bottom scroll bar cannot cover the last rows.
+	// Small patches fit their lines inside a scroll container, which
+	// scrolls them vertically, so the editor's own vertical bar cannot
+	// cover the last rows. The horizontal bar stays, drawn along the
+	// bottom of what shows: it scrolls the long lines sideways.
 	if strings.Count(patch, "\n") <= fittedPatchLines {
 		diff.FitContent = true
-		diff.NoScrollbars = true
 	}
 	*mode = diffPatch
 	*added, *deleted = diff.Stats()
@@ -473,7 +474,7 @@ func groupFilesFromPatch(patch string) (files []groupFileDiff, stat string, adde
 		default:
 			f := groupFileDiff{path: path, oldPath: oldPath, code: code, mode: diffPatch}
 			f.diff = editor.DiffState{
-				Layout: editor.DiffUnified, FitContent: true, NoScrollbars: true,
+				Layout: editor.DiffUnified, FitContent: true,
 			}
 			f.diff.SetPatch(p)
 			add, del := f.diff.Stats()
