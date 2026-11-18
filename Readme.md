@@ -12,6 +12,30 @@
 
 目标是**小、快、无 WebView、无 cgo**：一个静态二进制，双击即用；所有 Git 操作都走本机的 `git` 子进程，行为、错误信息和钩子与你命令行里的 git 一致。
 
+## 截图
+
+<p align="center">
+  <a href="docs/snapshots/Snipaste_2026-11-19_00-30-10.png">
+    <img src="docs/snapshots/Snipaste_2026-11-19_00-30-10.png"
+         alt="Git-K 工作区：左侧提交信息与差异，右侧状态列表" width="100%">
+  </a>
+</p>
+
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <a href="docs/snapshots/Snipaste_2026-11-19_00-29-54.png">
+        <img src="docs/snapshots/Snipaste_2026-11-19_00-29-54.png"
+             alt="Git-K 分支页：提交图与提交详情" width="100%">
+      </a>
+    </td>
+    <!-- 每行 4 列；补截图时把新的 <td> 放在这一行里。 -->
+    <td width="25%"></td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
+
 ## 为什么选 Git-K
 
 **一个二进制，原生界面，键盘上一路到底。**

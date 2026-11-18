@@ -12,6 +12,30 @@ A native Git client written in Go. Its interaction model is inspired by [git-col
 
 The goal is **small, fast, no WebView, no cgo**: one static binary, no browser runtime. Every Git operation runs the local `git` executable, so behavior, error messages and hooks match your terminal.
 
+## Screenshots
+
+<p align="center">
+  <a href="docs/snapshots/Snipaste_2026-11-19_00-30-10.png">
+    <img src="docs/snapshots/Snipaste_2026-11-19_00-30-10.png"
+         alt="Git-K workspace: commit message and diff on the left, status on the right" width="100%">
+  </a>
+</p>
+
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <a href="docs/snapshots/Snipaste_2026-11-19_00-29-54.png">
+        <img src="docs/snapshots/Snipaste_2026-11-19_00-29-54.png"
+             alt="Git-K branch page: commit graph and commit details" width="100%">
+      </a>
+    </td>
+    <!-- 4 columns per row; add new screenshots as more <td> cells here. -->
+    <td width="25%"></td>
+    <td width="25%"></td>
+    <td width="25%"></td>
+  </tr>
+</table>
+
 ## Why Git-K
 
 - **Native UI, no WebView**: mygo draws the window directly; no HTML/JS, no Electron or WebView2 runtime.
