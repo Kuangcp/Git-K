@@ -185,10 +185,10 @@ func (a *root) View(c *ui.Context) {
 	// 帧首同步 diff：DiffState 被视图元素按指针引用，构建后再重置会让
 	// 正在绘制的编辑器读到零值。
 	curBefore := a.cur
-	if a.pane != paneBranches {
+	if a.pane == paneWorkspace || a.pane == paneStashes && !a.stash.preview {
 		a.syncDiff()
 	}
-	if a.pane == paneStashes {
+	if a.pane == paneStashes && a.stash.preview {
 		a.syncStashDiff()
 	}
 	ui.Column(c).Fill().Children(func() {
@@ -215,7 +215,11 @@ func (a *root) View(c *ui.Context) {
 					}).Fill()
 				})
 			}, func() {
-				a.statusPane(c)
+				if a.pane == paneStashes && a.stash.preview {
+					a.stashStatusPane(c)
+				} else {
+					a.statusPane(c)
+				}
 			}).Fill()
 		}
 		a.footer(c)

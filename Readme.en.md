@@ -51,6 +51,7 @@ make run                    # CGO_ENABLED=0 go run . -d test-repo
 - [x] Amend with `Ctrl+M`, including a reset of the index to HEAD
 - [x] Branch page: commit graph, commit message, changed files and per-file diff (against the first parent)
 - [x] Main-line selector: follow one local branch or show all local branches with `ALL`
+- [x] Stashes: list them, summarize added/modified/deleted files, show every changed file, and click a file for its diff; Pop / Drop from the context menu (Drop asks first)
 - [x] File watching for the worktree and `.git`, with automatic status refresh
 - [x] Context actions: revert modifications and delete untracked files, both with confirmation
 - [x] Themes: system / light / dark and default / ocean / forest / warm palettes from Lobe UI tokens
@@ -100,7 +101,7 @@ Implemented today: repository discovery, status groups, multi-select staging, di
 Not implemented yet:
 
 - Partial staging (hunk / line)
-- Branch checkout, stash, merge / rebase / cherry-pick
+- Branch checkout, creating/applying stashes, merge / rebase / cherry-pick
 - A dedicated combined-diff view for conflicts, image diffs, submodule operations
 - Commit templates, signing, spellcheck, multiple windows
 

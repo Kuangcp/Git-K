@@ -136,6 +136,16 @@ func fittedDiff(c *ui.Context, state *editor.DiffState) {
 	})
 }
 
+// fittedText puts a text view that is as high as its lines in a scroll of
+// its own, with room below so no bar or edge covers the last rows.
+func fittedText(c *ui.Context, view *editor.State) {
+	ui.Scroll(c).FillWidth().Grow(1).Shrink(1).MinWidth(0).MinHeight(0).Children(func() {
+		ui.Column(c).FillWidth().Padding(0, 0, 48, 0).Children(func() {
+			editor.View(c, view).FillWidth()
+		})
+	})
+}
+
 // groupDiffPane stacks the group's diffstat and each file's diff, which
 // keep the single-file view's colors.
 func (a *root) groupDiffPane(c *ui.Context) {
@@ -144,6 +154,8 @@ func (a *root) groupDiffPane(c *ui.Context) {
 
 // fittedDiff puts a diff that is as high as its lines in a scroll of its
 // own, leaving room below so no bar or edge covers the last rows.
+// fittedText puts a text view that is as high as its lines in a scroll of
+// its own, with room below so no bar or edge covers the last rows.
 // groupDiffPane stacks a group's diffstat and each file's diff.
 func groupDiffPane(c *ui.Context, files []groupFileDiff, stat *editor.Buffer, statView *editor.State) {
 	t := c.Theme()

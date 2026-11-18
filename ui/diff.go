@@ -28,11 +28,16 @@ const (
 // groupFileDiff is one file of a group's aggregated diff, rendered as the
 // single-file view renders it.
 type groupFileDiff struct {
-	path string
-	mode diffMode
-	diff editor.DiffState
-	raw  *editor.Buffer
-	view editor.State
+	path    string
+	oldPath string
+	// code is the status letter: A, M, D or R.
+	code    byte
+	added   int
+	deleted int
+	mode    diffMode
+	diff    editor.DiffState
+	raw     *editor.Buffer
+	view    editor.State
 }
 
 // fileStat is one file of the group's diffstat.
@@ -199,11 +204,13 @@ func groupFileFromPatch(path, patch string, err error) (groupFileDiff, *fileStat
 			}
 			f.diff.SetPatch(patches[0])
 			add, del := f.diff.Stats()
+			f.added, f.deleted = add, del
 			st = &fileStat{path: path, added: add, deleted: del}
 		default:
 			f.mode = diffRaw
 			f.raw = editor.NewBuffer(patch)
 			add, del := countPatchLines(patch)
+			f.added, f.deleted = add, del
 			st = &fileStat{path: path, added: add, deleted: del}
 		}
 	}
@@ -453,18 +460,24 @@ func groupFilesFromPatch(patch string) (files []groupFileDiff, stat string, adde
 		if path == "" {
 			path = "diff"
 		}
+		code, oldPath := patchFileCode(p)
 		switch {
 		case p.Binary:
-			files = append(files, rawGroupFile(path, "二进制文件"))
+			f := rawGroupFile(path, "二进制文件")
+			f.code, f.oldPath = code, oldPath
+			files = append(files, f)
 		case len(p.Hunks) == 0:
-			files = append(files, rawGroupFile(path, "文件模式或权限变更"))
+			f := rawGroupFile(path, "文件模式或权限变更")
+			f.code, f.oldPath = code, oldPath
+			files = append(files, f)
 		default:
-			f := groupFileDiff{path: path, mode: diffPatch}
+			f := groupFileDiff{path: path, oldPath: oldPath, code: code, mode: diffPatch}
 			f.diff = editor.DiffState{
 				Layout: editor.DiffUnified, FitContent: true, NoScrollbars: true,
 			}
 			f.diff.SetPatch(p)
 			add, del := f.diff.Stats()
+			f.added, f.deleted = add, del
 			stats = append(stats, fileStat{path: path, added: add, deleted: del})
 			added += add
 			deleted += del
@@ -472,6 +485,19 @@ func groupFilesFromPatch(patch string) (files []groupFileDiff, stat string, adde
 		}
 	}
 	return files, formatDiffStat(stats), added, deleted
+}
+
+// patchFileCode names a file's change from its two names.
+func patchFileCode(p editor.FilePatch) (byte, string) {
+	switch {
+	case p.OldName == "":
+		return 'A', ""
+	case p.NewName == "":
+		return 'D', ""
+	case p.OldName != p.NewName:
+		return 'R', p.OldName
+	}
+	return 'M', ""
 }
 
 // rawGroupFile is one unparsed file of a stacked diff.

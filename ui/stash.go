@@ -25,6 +25,9 @@ type stashState struct {
 	busy      bool
 
 	files       []groupFileDiff
+	fileSel     int
+	allFiles    bool
+	fileList    ui.ListState
 	stat        *editor.Buffer
 	statView    editor.State
 	diffLoading bool
@@ -41,7 +44,7 @@ type stashState struct {
 }
 
 func newStashState() stashState {
-	s := stashState{sel: -1}
+	s := stashState{sel: -1, fileSel: -1}
 	s.stat = editor.NewBuffer("")
 	s.statView = editor.State{
 		Buffer:      s.stat,
@@ -178,6 +181,11 @@ func (a *root) applyStashDiff(gen uint64, key, patch string, err error) {
 	s.files = files
 	s.stat.Reset(stat)
 	s.diffAdded, s.diffDeleted = added, deleted
+	s.fileSel = -1
+	s.allFiles = false
+	if len(files) > 0 {
+		s.fileSel = 0
+	}
 }
 
 // resetDiff clears the stash preview's diff.
@@ -187,6 +195,8 @@ func (s *stashState) resetDiff() {
 	s.diffLoading = false
 	s.diffErr = ""
 	s.files = nil
+	s.fileSel = -1
+	s.allFiles = false
 	s.stat.Reset("")
 	s.diffAdded, s.diffDeleted = 0, 0
 }
@@ -197,8 +207,8 @@ func (a *root) clearStashPreview() {
 	a.stash.preview = false
 }
 
-// stashPane is the Stash tab's left top: stash list replacing the commit
-// panel, with the same status and diff around it.
+// stashPane is the Stash tab's left top: the stash list replacing the
+// commit panel; the chosen file's diff shows below it.
 func (a *root) stashPane(c *ui.Context) {
 	t := c.Theme()
 	s := &a.stash
@@ -300,7 +310,104 @@ func stashSubject(msg string) string {
 	return msg
 }
 
-// stashDiffPane shows the chosen stash's stacked diff.
+// stashStatusPane lists the chosen stash's changed files, like the
+// workspace's status panel lists the worktree's.
+func (a *root) stashStatusPane(c *ui.Context) {
+	t := c.Theme()
+	s := &a.stash
+	ui.Column(c).Fill().Children(func() {
+		a.paneTitle(c, "Stash 文件", fmt.Sprintf("%d 个文件", len(s.files)))
+		switch {
+		case s.diffErr != "":
+			ui.Text(c, s.diffErr).FontSize(12).TextColor(t.Danger).Padding(12)
+		case s.diffLoading && len(s.files) == 0:
+			ui.Text(c, "正在读取文件…").FontSize(12).TextColor(t.TextMuted).Padding(12)
+		case len(s.files) == 0:
+			ui.Text(c, "这个 Stash 没有文件").FontSize(12).TextColor(t.TextMuted).Padding(12)
+		default:
+			a.stashAllRow(c)
+			s.fileList.Selected = &s.fileSel
+			s.fileList.Key = func(i int) any { return s.files[i].path }
+			s.fileList.Label = func(i int) string { return gitx.DisplayPath(s.files[i].path) }
+			list := ui.List(c, &s.fileList, len(s.files), func(i int) {
+				a.stashFileRow(c, i)
+			}).Grow(1).MinHeight(0).Padding(0, 4)
+			if list.Changed() {
+				s.allFiles = false
+				c.Invalidate()
+			}
+		}
+	})
+}
+
+// stashAllRow is the aggregate row above the file list: how many files
+// were added, modified or deleted, and a click shows every diff.
+func (a *root) stashAllRow(c *ui.Context) {
+	t := c.Theme()
+	s := &a.stash
+	added, modified, deleted := stashFileCounts(s.files)
+	bar := ui.ButtonBase(c).FillWidth().Height(30).PaddingX(12).Gap(10).
+		AlignItems(ui.Center).Label(fmt.Sprintf("全部 %d 个文件", len(s.files)))
+	bar.Children(func() {
+		title := ui.Text(c, fmt.Sprintf("全部 %d 个文件", len(s.files))).FontSize(11).Bold()
+		if s.allFiles {
+			title.TextColor(t.Accent)
+		} else {
+			title.TextColor(t.TextMuted)
+		}
+		if added > 0 {
+			ui.Text(c, fmt.Sprintf("新增 %d", added)).FontSize(11).TextColor(t.Success)
+		}
+		if modified > 0 {
+			ui.Text(c, fmt.Sprintf("修改 %d", modified)).FontSize(11).TextColor(t.Warning)
+		}
+		if deleted > 0 {
+			ui.Text(c, fmt.Sprintf("删除 %d", deleted)).FontSize(11).TextColor(t.Danger)
+		}
+	})
+	switch {
+	case s.allFiles:
+		bar = bar.Background(t.SurfaceHover).BorderWidth(0, 0, 0, 2).BorderColor(t.Accent)
+	case bar.Hovered():
+		bar = bar.Background(t.SurfaceHover)
+	}
+	if bar.Clicked() {
+		s.allFiles = true
+		s.fileSel = -1
+		c.Invalidate()
+	}
+}
+
+// stashFileCounts groups the patch's files by their status letter; a
+// rename or type change counts as a modification.
+func stashFileCounts(files []groupFileDiff) (added, modified, deleted int) {
+	for _, f := range files {
+		switch f.code {
+		case 'A':
+			added++
+		case 'D':
+			deleted++
+		default:
+			modified++
+		}
+	}
+	return added, modified, deleted
+}
+
+func (a *root) stashFileRow(c *ui.Context, i int) {
+	s := &a.stash
+	f := s.files[i]
+	code := f.code
+	if code == 0 {
+		code = 'M'
+	}
+	row := ui.Row(c).Height(28).PaddingX(12).Gap(8).AlignItems(ui.Center)
+	row.Children(func() {
+		fileRowContent(c, code, gitx.Modified, f.path, f.oldPath)
+	})
+}
+
+// stashDiffPane shows the chosen file of the chosen stash.
 func (a *root) stashDiffPane(c *ui.Context) {
 	t := c.Theme()
 	s := &a.stash
@@ -308,23 +415,35 @@ func (a *root) stashDiffPane(c *ui.Context) {
 	if s.sel >= 0 && s.sel < len(s.entries) {
 		st = s.entries[s.sel]
 	}
+	allFiles := s.allFiles && len(s.files) > 0
+	var file *groupFileDiff
+	if !allFiles && s.fileSel >= 0 && s.fileSel < len(s.files) {
+		file = &s.files[s.fileSel]
+	}
 	ui.Column(c).Fill().MinWidth(0).MinHeight(0).
 		Padding(0, 0, diffBottomInset, 0).Children(func() {
 		ui.Row(c).Height(34).PaddingX(12).Gap(10).AlignItems(ui.Center).
 			BorderWidth(1, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "差异").FontSize(12).Bold().TextColor(t.TextMuted)
-			if st.Ref != "" {
+			added, deleted := s.diffAdded, s.diffDeleted
+			switch {
+			case allFiles:
+				ui.Text(c, fmt.Sprintf("%d 个文件", len(s.files))).FontSize(12).Bold()
+			case file != nil:
+				ui.Text(c, gitx.DisplayPath(file.path)).FontSize(12).Bold().SingleLine()
+				added, deleted = file.added, file.deleted
+			case st.Ref != "":
 				ui.Text(c, st.Ref).FontSize(12).Bold().SingleLine()
 				if st.Base != "" {
 					ui.Text(c, shortHash(st.Base)).FontSize(10).TextColor(t.TextMuted).
 						Font("monospace").Tooltip(st.Base)
 				}
 			}
-			if s.diffAdded > 0 {
-				ui.Text(c, fmt.Sprintf("+%d", s.diffAdded)).FontSize(11).TextColor(t.Success)
+			if added > 0 {
+				ui.Text(c, fmt.Sprintf("+%d", added)).FontSize(11).TextColor(t.Success)
 			}
-			if s.diffDeleted > 0 {
-				ui.Text(c, fmt.Sprintf("−%d", s.diffDeleted)).FontSize(11).TextColor(t.Danger)
+			if deleted > 0 {
+				ui.Text(c, fmt.Sprintf("−%d", deleted)).FontSize(11).TextColor(t.Danger)
 			}
 			ui.Text(c, "").Grow(1)
 			if s.diffLoading {
@@ -350,8 +469,24 @@ func (a *root) stashDiffPane(c *ui.Context) {
 			ui.Column(c).Fill().Center().Children(func() {
 				ui.Text(c, "这个 Stash 没有可显示的差异").FontSize(12).TextColor(t.TextMuted)
 			})
-		default:
+		case allFiles:
 			groupDiffPane(c, s.files, s.stat, &s.statView)
+		case file == nil:
+			ui.Column(c).Fill().Center().Children(func() {
+				ui.Text(c, "选择一个文件查看差异").FontSize(12).TextColor(t.TextMuted)
+			})
+		default:
+			switch file.mode {
+			case diffPatch:
+				fittedDiff(c, &file.diff)
+			case diffError:
+				ui.Column(c).Fill().Center().Padding(16).Children(func() {
+					ui.Text(c, file.raw.String()).FontSize(11).TextColor(t.Danger).
+						SingleLine().Tooltip(file.raw.String())
+				})
+			default:
+				fittedText(c, &file.view)
+			}
 		}
 	})
 }

@@ -53,6 +53,7 @@ make run                    # CGO_ENABLED=0 go run . -d test-repo
 - [x] 修正提交：`Ctrl+M` 读取 HEAD 信息并把 index 重置到 HEAD，再次提交走 `git commit --amend`
 - [x] 分支页：左栏提交图（HEAD + 本地分支，客户端 lane 布局），右栏提交详情、修改文件列表和单文件 diff；提交 diff 取第一父提交
 - [x] 主线切换：提交图上方可选某个本地分支，只看该分支及其已合入的提交；选 `ALL` 查看所有本地分支
+- [x] Stash：列出 stash，右侧汇总新增/修改/删除文件数并列出变更文件；点聚合条看整个 stash 的差异，点文件看单文件 diff；右键 Pop / Drop（Drop 二次确认）
 - [x] 文件监听：工作树和 `.git` 变化后自动刷新状态，忽略 `objects/`、`logs/` 和常见重型目录
 - [x] 右键操作：已修改文件可撤销修改（二次确认，`git restore --`），未跟踪文件可删除（`git clean -f --`）
 - [x] 外观：跟随系统 / 浅色 / 深色，默认 / 海洋 / 森林 / 暖阳配色；基于 Lobe UI 设计 token
@@ -100,7 +101,7 @@ make icon     # 由 assets/icon.svg 重新生成 PNG / ICO / Windows .syso
 当前专注「看状态、看差异、暂存、提交、看提交图」这条闭环，尚未实现：
 
 - 部分暂存（hunk / line）
-- 分支切换、stash、merge / rebase / cherry-pick 等写操作
+- 分支切换、Stash 创建/apply、merge / rebase / cherry-pick 等写操作
 - 冲突 combined diff 的专用渲染、图片 diff、子模块操作
 - 提交模板、签名、spellcheck、多窗口
 

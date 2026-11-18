@@ -53,13 +53,57 @@ func TestStashPaneAndPop(t *testing.T) {
 		}
 	}
 
-	// 点击状态文件返回工作区差异。
-	if err := tt.Click("unstaged.txt"); err != nil {
-		t.Fatalf("click status file: %v", err)
+	// 右侧面板列出 stash 中的文件，而不是工作区状态。
+	if !tt.HasText("a.txt") || !tt.HasText("new.txt") {
+		t.Fatalf("stash files missing: %v", tt.Texts())
+	}
+	if tt.HasText("unstaged.txt") {
+		t.Fatalf("workspace status shown in stash preview: %v", tt.Texts())
+	}
+	if r.stash.fileSel != 0 || r.stash.allFiles {
+		t.Fatalf("first stash file should be chosen: sel=%d all=%v", r.stash.fileSel, r.stash.allFiles)
+	}
+	for _, want := range []string{"全部 2 个文件", "新增 1", "修改 1"} {
+		if !tt.HasText(want) {
+			t.Fatalf("stash summary missing %q: %v", want, tt.Texts())
+		}
+	}
+	want := -1
+	for i, f := range r.stash.files {
+		if f.path == "new.txt" {
+			want = i
+		}
+	}
+	if want < 0 {
+		t.Fatalf("new.txt missing from stash files: %+v", r.stash.files)
+	}
+	if err := tt.Click("new.txt"); err != nil {
+		t.Fatalf("click stash file: %v", err)
+	}
+	tt.Frame()
+	if r.stash.fileSel != want || r.stash.allFiles || !r.stash.preview {
+		t.Fatalf("stash file choice: sel=%d want=%d all=%v preview=%v",
+			r.stash.fileSel, want, r.stash.allFiles, r.stash.preview)
+	}
+
+	if err := tt.Click("全部 2 个文件"); err != nil {
+		t.Fatalf("click stash summary: %v", err)
+	}
+	tt.Frame()
+	if !r.stash.allFiles || r.stash.fileSel != -1 {
+		t.Fatalf("aggregate stash diff: all=%v sel=%d", r.stash.allFiles, r.stash.fileSel)
+	}
+
+	// 差异头的工作区按钮返回工作区差异和状态。
+	if err := tt.Click("工作区差异"); err != nil {
+		t.Fatalf("click workspace diff: %v", err)
 	}
 	tt.Frame()
 	if r.stash.preview {
-		t.Fatal("clicking a status file must leave the stash preview")
+		t.Fatal("workspace diff button must leave the stash preview")
+	}
+	if !tt.HasText("unstaged.txt") {
+		t.Fatalf("workspace status not restored: %v", tt.Texts())
 	}
 
 	r.popStash("stash@{0}")
